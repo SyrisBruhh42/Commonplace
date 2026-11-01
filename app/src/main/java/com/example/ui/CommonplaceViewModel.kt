@@ -1533,19 +1533,22 @@ class CommonplaceViewModel(
     fun initializeDailyScheduleAndWidget(context: android.content.Context) {
         val loaded = DailyQuoteScheduler.loadScheduleState(context)
         _dailyQuoteScheduleState.value = loaded
-        val dailyQuote = _discoverState.value.dailyQuoteFromCollection
-        val stamp = "${_discoverState.value.lastPreviewStampLocation} • ${_discoverState.value.lastPreviewStampDate}"
-        DailyQuoteScheduler.syncDailyQuoteToWidgetCache(
+        val disc = _discoverState.value
+        _dailyQuoteScheduleState.value = DailyQuoteScheduler.syncDailyQuoteAndPreferences(
             context = context,
-            quote = dailyQuote,
-            archivalTimestampLabel = stamp
+            quote = disc.dailyQuoteFromCollection,
+            locationStamp = disc.lastPreviewStampLocation,
+            dateStamp = disc.lastPreviewStampDate,
+            timeStamp = disc.lastPreviewStampTime,
+            selectedInterests = disc.selectedInterests,
+            priorityMode = disc.priorityMode,
+            recentQuoteIds = disc.recentQuoteIds
         )
-        _dailyQuoteScheduleState.value = DailyQuoteScheduler.loadScheduleState(context)
     }
 
     fun toggleDailyQuoteNotifications(context: android.content.Context, enabled: Boolean) {
         val current = _dailyQuoteScheduleState.value
-        val updated = DailyQuoteScheduler.saveAndApplySchedule(
+        val updated = DailyQuoteScheduler.configureDailyQuoteSchedule(
             context = context,
             enabled = enabled,
             hourOfDay = current.scheduledHour,
@@ -1557,7 +1560,7 @@ class CommonplaceViewModel(
 
     fun updateDailyNotificationTime(context: android.content.Context, hour: Int, minute: Int) {
         val current = _dailyQuoteScheduleState.value
-        val updated = DailyQuoteScheduler.saveAndApplySchedule(
+        val updated = DailyQuoteScheduler.configureDailyQuoteSchedule(
             context = context,
             enabled = true,
             hourOfDay = hour,
@@ -1569,7 +1572,7 @@ class CommonplaceViewModel(
 
     fun toggleUsePriorityEngineForDailyPush(context: android.content.Context, usePriority: Boolean) {
         val current = _dailyQuoteScheduleState.value
-        val updated = DailyQuoteScheduler.saveAndApplySchedule(
+        val updated = DailyQuoteScheduler.configureDailyQuoteSchedule(
             context = context,
             enabled = current.notificationsEnabled,
             hourOfDay = current.scheduledHour,
@@ -1590,11 +1593,20 @@ class CommonplaceViewModel(
             syncedDailyOverride = disc.dailyQuoteFromCollection
         )
         val stamp = "${disc.lastPreviewStampLocation} • ${disc.lastPreviewStampDate} • ${disc.lastPreviewStampTime}"
-        DailyQuoteScheduler.syncDailyQuoteToWidgetCache(context, quote, stamp)
-        val posted = DailyQuoteScheduler.dispatchQuoteOfTheDayNotification(
+        DailyQuoteScheduler.syncDailyQuoteAndPreferences(
             context = context,
             quote = quote,
-            archivalStamp = stamp
+            locationStamp = disc.lastPreviewStampLocation,
+            dateStamp = disc.lastPreviewStampDate,
+            timeStamp = disc.lastPreviewStampTime,
+            selectedInterests = disc.selectedInterests,
+            priorityMode = disc.priorityMode,
+            recentQuoteIds = disc.recentQuoteIds
+        )
+        val posted = DailyQuoteScheduler.dispatchQuoteOfTheDayNotification(
+            context = context,
+            overrideQuote = quote,
+            overrideStamp = stamp
         )
         _dailyQuoteScheduleState.update {
             it.copy(
@@ -1610,12 +1622,17 @@ class CommonplaceViewModel(
     fun syncAndRequestPinHomeWidget(context: android.content.Context) {
         val disc = _discoverState.value
         val stamp = "${disc.lastPreviewStampLocation} • ${disc.lastPreviewStampDate} • ${disc.lastPreviewStampTime}"
-        DailyQuoteScheduler.syncDailyQuoteToWidgetCache(
+        DailyQuoteScheduler.syncDailyQuoteAndPreferences(
             context = context,
             quote = disc.dailyQuoteFromCollection,
-            archivalTimestampLabel = stamp
+            locationStamp = disc.lastPreviewStampLocation,
+            dateStamp = disc.lastPreviewStampDate,
+            timeStamp = disc.lastPreviewStampTime,
+            selectedInterests = disc.selectedInterests,
+            priorityMode = disc.priorityMode,
+            recentQuoteIds = disc.recentQuoteIds
         )
-        val pinned = DailyQuoteScheduler.requestPinWidgetToHomeScreen(context)
+        val pinned = DailyQuoteScheduler.requestPinHomeWidget(context)
         _dailyQuoteScheduleState.update {
             it.copy(
                 lastSyncedQuoteId = disc.dailyQuoteFromCollection.id,
@@ -1928,7 +1945,10 @@ class CommonplaceViewModel(
                     text = it.pin.quoteText,
                     author = it.pin.quoteAuthor,
                     sourceWork = it.pin.sourceWork,
-                    category = it.pin.category
+                    category = it.pin.category,
+                    tags = listOf(it.pin.category.ifBlank { "Philosophy" }),
+                    onlinePopularityScore = 92,
+                    popularOnlineContext = "Pinned on Commonplace World Map"
                 )
             } ?: _discoverState.value.dailyQuoteFromCollection
             viewModelScope.launch {
@@ -2008,8 +2028,8 @@ class CommonplaceViewModel(
                 it.copy(
                     userCurrentLat = stamp.latitude,
                     userCurrentLon = stamp.longitude,
-                    userCurrentRegionLabel = stamp.locationName,
-                    statusBannerMessage = "GPS updated: ${stamp.locationName} (Coarse public grid ${ZeroTrustMapCoordinatesHelper.roundToCoarseGrid(stamp.latitude)}°, ${ZeroTrustMapCoordinatesHelper.roundToCoarseGrid(stamp.longitude)}°)"
+                    userCurrentRegionLabel = stamp.locationStamp,
+                    statusBannerMessage = "GPS updated: ${stamp.locationStamp} (Coarse public grid ${ZeroTrustMapCoordinatesHelper.roundToCoarseGrid(stamp.latitude)}°, ${ZeroTrustMapCoordinatesHelper.roundToCoarseGrid(stamp.longitude)}°)"
                 )
             }
         }
@@ -2054,7 +2074,7 @@ class CommonplaceViewModel(
                 category = quote.category,
                 latitude = coarseLat,
                 longitude = coarseLon,
-                regionLabel = stamp.locationName,
+                regionLabel = stamp.locationStamp,
                 anonymousAlias = alias
             )
             val optimisticIdentity = MapPinIdentityDocument(
@@ -2069,7 +2089,7 @@ class CommonplaceViewModel(
                 ),
                 personalMarginalia = personalMarginalia.trim(),
                 exactLocationLabel = ZeroTrustMapCoordinatesHelper.encodeIdentityLocationEnvelope(
-                    cleanLocationLabel = "${stamp.locationName} • ${stamp.formattedDate} ${stamp.formattedTime}",
+                    cleanLocationLabel = "${stamp.locationStamp} • ${stamp.dateStamp} ${stamp.timeStamp}",
                     exactLat = stamp.latitude,
                     exactLon = stamp.longitude,
                     isHiddenFromPublic = !globalVisible,
@@ -2101,7 +2121,7 @@ class CommonplaceViewModel(
                     todayDayKey = todayKey,
                     userCurrentLat = stamp.latitude,
                     userCurrentLon = stamp.longitude,
-                    userCurrentRegionLabel = stamp.locationName,
+                    userCurrentRegionLabel = stamp.locationStamp,
                     isPinningInProgress = false,
                     statusBannerMessage = if (globalVisible) {
                         "Pinned to World Map! Public users see '$alias' at ($coarseLat°, $coarseLon°); permitted friends see your identity & configured precision."
@@ -2116,8 +2136,8 @@ class CommonplaceViewModel(
                 quote = quote,
                 latitude = stamp.latitude,
                 longitude = stamp.longitude,
-                regionLabel = stamp.locationName,
-                exactLocationLabel = "${stamp.locationName} • ${stamp.formattedDate} ${stamp.formattedTime}",
+                regionLabel = stamp.locationStamp,
+                exactLocationLabel = "${stamp.locationStamp} • ${stamp.dateStamp} ${stamp.timeStamp}",
                 personalMarginalia = personalMarginalia,
                 connectedCircles = circles,
                 additionalConnectedEmails = additionalConnectedFriendEmails.value,
@@ -2155,7 +2175,7 @@ class CommonplaceViewModel(
         val firstCircle = circles.firstOrNull()
         viewModelScope.launch {
             if (firstCircle != null) {
-                repository.addMemberToFamilyCircle(firstCircle.id, clean)
+                repository.inviteGoogleMemberToCircle(firstCircle, clean)
             } else {
                 repository.createFamilyCircle("Zero-Trust Map Circle", listOf(clean))
             }
@@ -2178,7 +2198,9 @@ class CommonplaceViewModel(
             author = item.pin.quoteAuthor,
             sourceWork = item.pin.sourceWork.ifBlank { "World Map Pin (${item.pin.regionLabel})" },
             category = item.pin.category.ifBlank { "Philosophy" },
-            tags = listOf(item.pin.category.ifBlank { "Philosophy" }, "WorldMapPin")
+            tags = listOf(item.pin.category.ifBlank { "Philosophy" }, "WorldMapPin"),
+            onlinePopularityScore = 92,
+            popularOnlineContext = "Saved from Commonplace World Map (${item.displayAttributionLabel})"
         )
         saveQuoteWithStamp(
             quote = quote,

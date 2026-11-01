@@ -234,13 +234,23 @@ fun QuoteDiscoveryScreen(
             // Home Screen Daily Quote Widget & Scheduled 'Quote of the Day' Notification Card
             DailyQuoteWidgetAndScheduleCard(
                 scheduleState = dailyScheduleState,
-                currentDailyQuote = state.dailyQuoteFromCollection,
-                archivalTimestampPreview = "${state.lastPreviewStampLocation} • ${state.lastPreviewStampDate} • ${state.lastPreviewStampTime}",
-                onToggleNotifications = onToggleDailyQuoteNotifications,
-                onSelectScheduledTime = onUpdateDailyNotificationTime,
-                onToggleUsePriorityEngine = onTogglePriorityEngineForDailyPush,
+                dailyQuote = state.dailyQuoteFromCollection,
+                previewLocation = state.lastPreviewStampLocation,
+                previewDate = state.lastPreviewStampDate,
+                previewTime = state.lastPreviewStampTime,
+                onUpdateSchedule = { enabled, hour, minute, usePriority ->
+                    if (enabled != dailyScheduleState.notificationsEnabled) {
+                        onToggleDailyQuoteNotifications(enabled)
+                    }
+                    if (hour != dailyScheduleState.scheduledHour || minute != dailyScheduleState.scheduledMinute) {
+                        onUpdateDailyNotificationTime(hour, minute)
+                    }
+                    if (usePriority != dailyScheduleState.usePriorityEngineForDailyPush) {
+                        onTogglePriorityEngineForDailyPush(usePriority)
+                    }
+                },
                 onSendTestNotificationNow = onSendTestDailyQuoteNotification,
-                onSyncAndPinHomeWidget = onSyncAndPinHomeScreenWidget
+                onPinOrSyncHomeWidget = onSyncAndPinHomeScreenWidget
             )
 
             Spacer(modifier = Modifier.height(16.dp))

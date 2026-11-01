@@ -251,6 +251,98 @@ class QuoteRepositoryRuleTest : FirestoreEmulatorTestBase() {
         assertTrue("Expected postSalonMessage to succeed: ${postRes.exceptionOrNull()}", postRes.isSuccess)
     }
 
+    @Test
+    fun pinDailyQuoteToWorldMap_enforcesOncePerDayAndZeroTrustFriendIdentityAcl() = runBlocking {
+        val aliceUid = signInTestUser(ALICE_EMAIL)
+        val aliceRepo = QuoteRepository(firestore, auth)
+
+        val circleId = withTimeout(DEFAULT_TIMEOUT_MS) {
+            aliceRepo.createFamilyCircle(
+                circleName = "Trusted Map Circle",
+                invitedGoogleEmails = listOf(BOB_EMAIL)
+            ).getOrThrow()
+        }
+
+        val bobUid = signInTestUser(BOB_EMAIL)
+        val bobRepo = QuoteRepository(firestore, auth)
+        withTimeout(DEFAULT_TIMEOUT_MS) {
+            bobRepo.syncGoogleEmailInvitesToCircles().getOrThrow()
+        }
+        val sharedCircle = withTimeout(DEFAULT_TIMEOUT_MS) {
+            bobRepo.getFamilyCircleById(circleId).getOrThrow()!!
+        }
+
+        // Alice pins her daily quote to the World Map with Bob permitted at NEIGHBORHOOD precision
+        signInTestUser(ALICE_EMAIL)
+        val dayKey = "2026_11_01"
+        val friendPerms = listOf(
+            FriendPrivacyPermission(
+                friendId = "bob",
+                displayName = "Bob",
+                email = BOB_EMAIL,
+                uid = bobUid,
+                circleName = sharedCircle.name,
+                isSharingEnabled = true,
+                precision = FriendLocationPrecision.NEIGHBORHOOD
+            )
+        )
+
+        val firstPinResult = withTimeout(DEFAULT_TIMEOUT_MS) {
+            aliceRepo.pinDailyQuoteToWorldMap(
+                dayKey = dayKey,
+                quote = sampleQuote,
+                latitude = 37.7749,
+                longitude = -122.4194,
+                regionLabel = "San Francisco, CA",
+                exactLocationLabel = "San Francisco Conservatory • Nov 1, 2026",
+                personalMarginalia = "Morning pin from SF.",
+                connectedCircles = listOf(sharedCircle),
+                globalMapVisibilityEnabled = true,
+                friendPermissions = friendPerms
+            )
+        }
+        assertTrue("Expected first daily pin to succeed: ${firstPinResult.exceptionOrNull()}", firstPinResult.isSuccess)
+        val pinId = firstPinResult.getOrThrow().pin.id
+        assertEquals("${aliceUid}_$dayKey", pinId)
+
+        // Second pin on the same day must be rejected by the 1/day limit
+        val secondPinResult = withTimeout(DEFAULT_TIMEOUT_MS) {
+            aliceRepo.pinDailyQuoteToWorldMap(
+                dayKey = dayKey,
+                quote = sampleQuote,
+                latitude = 37.7749,
+                longitude = -122.4194,
+                regionLabel = "San Francisco, CA",
+                exactLocationLabel = "San Francisco Conservatory",
+                personalMarginalia = "Second attempt same day",
+                connectedCircles = listOf(sharedCircle),
+                globalMapVisibilityEnabled = true,
+                friendPermissions = friendPerms
+            )
+        }
+        assertTrue("Expected second pin on same day to fail", secondPinResult.isFailure)
+
+        // Connected friend (Bob) can read Alice's Zero-Trust identity envelope
+        signInTestUser(BOB_EMAIL)
+        val bobIdentityRead = withTimeout(DEFAULT_TIMEOUT_MS) {
+            bobRepo.getPinIdentityForConnectedFriend(pinId)
+        }
+        assertTrue("Expected connected friend Bob to read identity: ${bobIdentityRead.exceptionOrNull()}", bobIdentityRead.isSuccess)
+        assertNotNull(bobIdentityRead.getOrThrow())
+
+        // Outsider (Mallory) is denied access to Alice's Zero-Trust identity envelope
+        signInTestUser(OUTSIDER_EMAIL)
+        val outsiderRepo = QuoteRepository(firestore, auth)
+        val outsiderIdentityRead = withTimeout(DEFAULT_TIMEOUT_MS) {
+            outsiderRepo.getPinIdentityForConnectedFriend(pinId)
+        }
+        assertTrue("Expected outsider Mallory to be denied identity read", outsiderIdentityRead.isFailure)
+        assertEquals(
+            FirebaseFirestoreException.Code.PERMISSION_DENIED,
+            outsiderIdentityRead.exceptionOrNull()?.unwrapFirestoreException()?.code
+        )
+    }
+
     private companion object {
         const val ALICE_EMAIL = "alice@commonplace.test"
         const val BOB_EMAIL = "bob@commonplace.test"
