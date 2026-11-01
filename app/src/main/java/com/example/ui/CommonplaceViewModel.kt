@@ -41,6 +41,9 @@ import com.example.data.QuoteItem
 import com.example.data.QuoteRepository
 import com.example.data.SavedQuoteDocument
 import com.example.data.SeedQuoteCatalog
+import com.example.data.DisneyImagineeringTranslator
+import com.example.data.OasisHallDestination
+import com.example.data.RmblynChannelMessage
 import com.example.data.TotalOrderLwwCell
 import com.example.data.TrilogyWing
 import com.example.data.VoiceTranscriptionState
@@ -2251,11 +2254,27 @@ class CommonplaceViewModel(
                 fallbackUserId = currentUserId,
                 minuteOfDay = minuteOfDay
             )
+            // Fetch OpenAudible / AudioBookshelf Sanctuary Storyteller library (cb64f9e7) non-blocking <= 1600ms
+            val (chapters, isOfflineFallback) = oasisServerClient.fetchOpenAudibleLibrary(
+                baseUrl = preset.baseUrl,
+                stableNodeId = handshake.stableNodeId
+            )
+            val bannerText = DisneyImagineeringTranslator.translateTechnicalTerm(handshake.statusSummary)
             _trilogyState.update { current ->
                 current.copy(
                     serverPreset = preset,
                     handshake = handshake,
-                    lastSyncStatusBanner = handshake.statusSummary
+                    storyteller = current.storyteller.copy(
+                        chapters = chapters,
+                        isOfflineSampleFallback = isOfflineFallback,
+                        statusBadge = if (isOfflineFallback) {
+                            "Sanctuary Storyteller (cb64f9e7) • Cozy Desk Narration Active"
+                        } else {
+                            "Sanctuary Storyteller (cb64f9e7) • Live OpenAudible Library Connected"
+                        }
+                    ),
+                    friendlyGuideCard = DisneyImagineeringTranslator.toFriendlyGuideCard(bannerText),
+                    lastSyncStatusBanner = bannerText
                 )
             }
 
@@ -2274,10 +2293,15 @@ class CommonplaceViewModel(
     }
 
     fun selectTrilogyWing(wing: TrilogyWing) {
+        val mappedDest = OasisHallDestination.entries.firstOrNull { it.mappedWing == wing }
+            ?: OasisHallDestination.COMMONPLACE_WING_I
+        val banner = "Switched to ${wing.wingNumber}: ${wing.title}"
         _trilogyState.update { current ->
             current.copy(
                 activeWing = wing,
-                lastSyncStatusBanner = "Switched to ${wing.wingNumber}: ${wing.title}"
+                activeHallDestination = mappedDest,
+                friendlyGuideCard = DisneyImagineeringTranslator.toFriendlyGuideCard(banner),
+                lastSyncStatusBanner = banner
             )
         }
         viewModelScope.launch {
@@ -2287,6 +2311,216 @@ class CommonplaceViewModel(
                 activeRoomCode = state.activeRoomCode,
                 activeWingSlug = wing.slug,
                 stableNodeId = state.handshake.stableNodeId
+            )
+        }
+    }
+
+    fun selectOasisHallDestination(destination: OasisHallDestination) {
+        val targetWing = destination.mappedWing ?: _trilogyState.value.activeWing
+        val banner = "Switched to ${destination.displayLabel} • ${destination.comfortModeSummary}"
+        _trilogyState.update { current ->
+            current.copy(
+                activeHallDestination = destination,
+                activeWing = targetWing,
+                cartridgeSlug = destination.wireSlug,
+                friendlyGuideCard = DisneyImagineeringTranslator.toFriendlyGuideCard(
+                    rawNoticeOrError = banner,
+                    preferredActionLabel = if (destination.isArcadeHallCabinet) {
+                        "Return to Commonplace Wing I"
+                    } else {
+                        "Explore ${destination.displayLabel}"
+                    }
+                ),
+                lastSyncStatusBanner = banner
+            )
+        }
+        viewModelScope.launch {
+            val state = _trilogyState.value
+            oasisServerClient.u2SyncPresence(
+                u2BaseUrl = state.serverPreset.baseUrl,
+                activeRoomCode = state.activeRoomCode,
+                activeWingSlug = destination.wireSlug,
+                stableNodeId = state.handshake.stableNodeId
+            )
+        }
+    }
+
+    /**
+     * Dispatches and listens for `oasis:overlay-toggle` (`Shift+Tab` / `Ctrl+K`) so single-player
+     * action physics pause cleanly while 16-Channel Rmblyn Family Chat, menus, and LFS navigation
+     * remain responsive without dropping the active party room (`OASIS-XXXX`).
+     */
+    fun toggleOasisOverlay(triggerSource: String = "oasis:overlay-toggle") {
+        _trilogyState.update { current ->
+            val nextOpen = !current.isOasisOverlayOpen
+            val statusMsg = if (nextOpen) {
+                "Dispatched $triggerSource • Single-player action physics paused • Party ${current.activeRoomCode} live"
+            } else {
+                "Closed $triggerSource • Single-player action physics resumed • Party ${current.activeRoomCode} live"
+            }
+            current.copy(
+                isOasisOverlayOpen = nextOpen,
+                isActionPhysicsPaused = nextOpen,
+                lastOverlayToggleEvent = statusMsg,
+                friendlyGuideCard = DisneyImagineeringTranslator.toFriendlyGuideCard(statusMsg),
+                lastSyncStatusBanner = statusMsg
+            )
+        }
+    }
+
+    fun toggleZt9ComfortOverrides(enabled: Boolean) {
+        _trilogyState.update { current ->
+            val updatedComfort = current.zt9ComfortOverrides.copy(familyFriendlyArcadeMode = enabled)
+            val msg = if (enabled) {
+                "Family-Friendly Arcade Mode (zt9_comfort_overrides) ON: Cardboard Critters / Neon Arcade Bots / Confetti KOs / Tag-Team Rescue"
+            } else {
+                "Standard Arcade Mode active • Switch back to Family-Friendly Mode anytime"
+            }
+            current.copy(
+                zt9ComfortOverrides = updatedComfort,
+                friendlyGuideCard = DisneyImagineeringTranslator.toFriendlyGuideCard(msg),
+                lastSyncStatusBanner = msg
+            )
+        }
+    }
+
+    fun selectRmblynChannel(channelNumber: Int) {
+        val bounded = channelNumber.coerceIn(1, 16)
+        _trilogyState.update { current ->
+            current.copy(activeRmblynChannel = bounded)
+        }
+    }
+
+    fun sendRmblynFamilyChatMessage(rawMessage: String) {
+        val clean = rawMessage.trim()
+        if (clean.isBlank()) return
+        val current = _trilogyState.value
+        val chNum = current.activeRmblynChannel
+        val chName = CommonplaceTrilogySyncEnvelopeV1.RMBLYN_16_CHANNELS
+            .firstOrNull { it.first == chNum }?.second ?: "#01-hearth-lobby"
+        val userMsg = RmblynChannelMessage(
+            id = "rmb_usr_${System.currentTimeMillis()}",
+            channelNumber = chNum,
+            channelName = chName,
+            senderHandle = "@family-reader",
+            text = clean,
+            isCompanionReply = false
+        )
+
+        val companionReply: RmblynChannelMessage? = when {
+            clean.contains("@willow", ignoreCase = true) -> RmblynChannelMessage(
+                id = "rmb_willow_${System.currentTimeMillis() + 1}",
+                channelNumber = chNum,
+                channelName = chName,
+                senderHandle = "@willow",
+                text = "Willow's Lantern shines on Room ${current.activeRoomCode}! Your Time-Machine Memory Vault (${current.selectedSaveSlotKey}) is safe and warm.",
+                isCompanionReply = true
+            )
+            clean.contains("@cinder", ignoreCase = true) -> RmblynChannelMessage(
+                id = "rmb_cinder_${System.currentTimeMillis() + 1}",
+                channelNumber = chNum,
+                channelName = chName,
+                senderHandle = "@cinder",
+                text = "Cinder here! Neon Arcade Bots and Cardboard Critters are ready for Confetti KOs and Tag-Team Rescue!",
+                isCompanionReply = true
+            )
+            clean.contains("@mote", ignoreCase = true) -> RmblynChannelMessage(
+                id = "rmb_mote_${System.currentTimeMillis() + 1}",
+                channelNumber = chNum,
+                channelName = chName,
+                senderHandle = "@mote",
+                text = "Mote sprinkled Starlight Rupees (+5) on your reading desk! Sanctuary Storyteller is ready whenever you want a chapter.",
+                isCompanionReply = true
+            )
+            else -> null
+        }
+
+        _trilogyState.update { state ->
+            val updatedList = (state.rmblynMessages + listOfNotNull(userMsg, companionReply)).takeLast(32)
+            state.copy(
+                rmblynMessages = updatedList,
+                lastRmblynCommandResult = "Sent to $chName: $clean"
+            )
+        }
+        sendRmblynOverlayCommand(clean)
+    }
+
+    // =========================================================================
+    // AudioBookshelf & OpenAudible Sanctuary Storyteller (`cb64f9e7`) Actions
+    // =========================================================================
+
+    fun toggleSanctuaryStorytellerPlayPause() {
+        val current = _trilogyState.value.storyteller
+        val nextPlaying = !current.isPlaying
+        val chapter = current.activeChapter()
+        val streamUrl = oasisServerClient.buildOpenAudibleStreamUrl(
+            baseUrl = _trilogyState.value.serverPreset.baseUrl,
+            chapterKey = chapter.key
+        )
+        _trilogyState.update { state ->
+            val msg = if (nextPlaying) {
+                "Playing ${chapter.title} via Sanctuary Storyteller (cb64f9e7) • Sleep-Fade ${state.storyteller.sleepFadeTimerMinutes ?: 30}m"
+            } else {
+                "Paused Sanctuary Storyteller (${chapter.title})"
+            }
+            state.copy(
+                storyteller = state.storyteller.copy(
+                    isPlaying = nextPlaying,
+                    statusBadge = "$msg • $streamUrl"
+                ),
+                friendlyGuideCard = DisneyImagineeringTranslator.toFriendlyGuideCard(msg),
+                lastSyncStatusBanner = msg
+            )
+        }
+
+        // Also trigger warm porch ambient + TTS narration when playing in local/offline fallback
+        if (nextPlaying) {
+            val quoteForNarration = QuoteItem(
+                id = "storyteller_${chapter.key}",
+                text = chapter.narrationTranscript,
+                author = chapter.author,
+                sourceWork = chapter.bookTitle,
+                category = "Literature",
+                tags = listOf("Literature", "SanctuaryStoryteller"),
+                onlinePopularityScore = 98,
+                popularOnlineContext = "Sanctuary Storyteller (cb64f9e7)"
+            )
+            readQuoteAloud(quoteForNarration)
+        } else {
+            stopQuoteAudio()
+        }
+    }
+
+    fun selectSanctuaryChapter(chapterKey: String) {
+        _trilogyState.update { state ->
+            val found = state.storyteller.chapters.firstOrNull { it.key == chapterKey }
+                ?: state.storyteller.activeChapter()
+            val msg = "Selected Storyteller Chapter: ${found.title} (/api/lfs/openaudible/stream/${found.key})"
+            state.copy(
+                storyteller = state.storyteller.copy(
+                    activeChapterKey = found.key,
+                    playbackElapsedSeconds = 0,
+                    statusBadge = msg
+                ),
+                friendlyGuideCard = DisneyImagineeringTranslator.toFriendlyGuideCard(msg),
+                lastSyncStatusBanner = msg
+            )
+        }
+    }
+
+    fun setStarlightSleepFadeTimer(minutes: Int?) {
+        val validMinutes = if (minutes in listOf(15, 30, 45)) minutes else 30
+        _trilogyState.update { state ->
+            val secs = (validMinutes ?: 30) * 60
+            val msg = "Starlight Sleep-Fade Timer set to ${validMinutes}m (${DisneyImagineeringTranslator.STARLIGHT_QUIET_HOURS_LABEL})"
+            state.copy(
+                storyteller = state.storyteller.copy(
+                    sleepFadeTimerMinutes = validMinutes,
+                    sleepFadeRemainingSeconds = secs,
+                    statusBadge = msg
+                ),
+                friendlyGuideCard = DisneyImagineeringTranslator.toFriendlyGuideCard(msg),
+                lastSyncStatusBanner = msg
             )
         }
     }

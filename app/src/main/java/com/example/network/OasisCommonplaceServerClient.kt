@@ -1291,6 +1291,76 @@ class OasisCommonplaceServerClient(
         }
     }
 
+    // =========================================================================
+    // 4. AudioBookshelf & OpenAudible Sanctuary Storyteller (`cb64f9e7`)
+    // =========================================================================
+
+    val SANCTUARY_STORYTELLER_SERVICE_ID = "cb64f9e7"
+    val OPENAUDIBLE_LIBRARY_PATH = "/api/lfs/openaudible/library"
+    val OPENAUDIBLE_STREAM_TEMPLATE = "/api/lfs/openaudible/stream/[key]"
+
+    fun buildOpenAudibleStreamUrl(
+        baseUrl: String = LfsServerPreset.TAILSCALE_ANCHOR_PROD.baseUrl,
+        chapterKey: String
+    ): String {
+        val cleanKey = chapterKey.trim().ifBlank { "ch_01_lantern_porch" }
+        return "${baseUrl.trimEnd('/')}/api/lfs/openaudible/stream/$cleanKey"
+    }
+
+    suspend fun fetchOpenAudibleLibrary(
+        baseUrl: String = LfsServerPreset.TAILSCALE_ANCHOR_PROD.baseUrl,
+        stableNodeId: String = "nStable_commonplace_u1_7f4a"
+    ): Pair<List<com.example.data.SanctuaryStorytellerChapter>, Boolean> = withContext(ioDispatcher) {
+        val url = "${baseUrl.trimEnd('/')}$OPENAUDIBLE_LIBRARY_PATH"
+        try {
+            val req = Request.Builder()
+                .url(url)
+                .get()
+                .header("Accept", "application/json")
+                .header("X-Oasis-Protocol", "oasis-v1")
+                .header("X-Oasis-Service-Id", SANCTUARY_STORYTELLER_SERVICE_ID)
+                .header("X-Lfs-Sso-Handshake", "http://100.106.12.104:13379/lfs-sso/handshake")
+                .header("X-Tailscale-Node-StableId", stableNodeId)
+                .build()
+            httpClient.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val bodyStr = resp.body?.string().orEmpty()
+                    if (bodyStr.isNotBlank()) {
+                        val json = JSONObject(bodyStr)
+                        val items = json.optJSONArray("chapters")
+                        if (items != null && items.length() > 0) {
+                            val parsed = mutableListOf<com.example.data.SanctuaryStorytellerChapter>()
+                            for (i in 0 until items.length()) {
+                                val obj = items.optJSONObject(i) ?: continue
+                                val key = obj.optString("key", "ch_0${i + 1}")
+                                parsed.add(
+                                    com.example.data.SanctuaryStorytellerChapter(
+                                        key = key,
+                                        title = obj.optString("title", "Chapter ${i + 1}"),
+                                        bookTitle = obj.optString("bookTitle", "Sanctuary Audible Collection"),
+                                        author = obj.optString("author", "Commonplace Guild"),
+                                        durationSeconds = obj.optInt("durationSeconds", 900),
+                                        streamPath = "/api/lfs/openaudible/stream/$key",
+                                        narrationTranscript = obj.optString(
+                                            "narrationTranscript",
+                                            "Warm porch narration streamed via Hearth Key ($stableNodeId)."
+                                        )
+                                    )
+                                )
+                            }
+                            if (parsed.isNotEmpty()) {
+                                return@withContext parsed to false
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            // Non-blocking <=1600ms timeout fallback to bundled Sanctuary Storyteller chapters
+        }
+        com.example.data.SanctuaryStorytellerState.defaultSanctuaryChapters() to true
+    }
+
     private fun executeGatedPostWithFallback(
         url: String,
         bodyJson: JSONObject,
@@ -1313,3 +1383,4 @@ class OasisCommonplaceServerClient(
         }
     }
 }
+

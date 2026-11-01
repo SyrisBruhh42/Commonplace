@@ -433,12 +433,12 @@ enum class CommonplaceTransportMode(val label: String, val subtitle: String) {
 
 enum class LfsHostMode(val label: String, val description: String) {
     LAUNCH_U2_HOSTING_SERVICE(
-        "Launch on LFS Hosting Service (U2)",
+        "Open a Family Cloud Room",
         "Dedicated 24/7 cloud salon room on play.lewisfamilysystems.com"
     ),
     HOST_LOCAL_DEVICE(
-        "Host on This Device",
-        "Authoritative room hosted locally and bridged via LFS Tunnel or LAN :48899"
+        "Host From My Desk",
+        "Authoritative room hosted from your desk and shared with your family circle"
     )
 }
 
@@ -1689,14 +1689,265 @@ data class AegisSaveSlotSummary(
 )
 
 /**
+ * LFS Oasis "Disney Imagineering Engagement Translator" (Grade <= 8.0 All-Ages Vocabulary).
+ * Maps technical, cryptographic, or combat terminology into warm, imaginative family labels
+ * while keeping underlying wire keys and schema field names intact.
+ */
+object DisneyImagineeringTranslator {
+    const val HEARTH_KEY_LABEL = "Hearth Key (Instant Family Pass)"
+    const val TIME_MACHINE_VAULTS_LABEL = "Time-Machine Memory Vaults"
+    const val HOST_FROM_MY_DESK_LABEL = "Host From My Desk"
+    const val OPEN_FAMILY_CLOUD_ROOM_LABEL = "Open a Family Cloud Room"
+    const val FRIENDLY_GUIDE_CARD_LABEL = "Friendly Guide Cards"
+    const val STARLIGHT_QUIET_HOURS_LABEL = "Starlight Quiet Hours (Rest & Recharge Time)"
+    const val STARLIGHT_RUPEES_RELICS_LABEL = "Starlight Rupees & Wonder Relics"
+
+    // Default zt9_comfort_overrides Family-Friendly Arcade Mode vocabulary
+    const val CARDBOARD_CRITTERS_LABEL = "Cardboard Critters / Neon Arcade Bots"
+    const val CONFETTI_KOS_LABEL = "Confetti KOs"
+    const val TAG_TEAM_RESCUE_LABEL = "Tag-Team Rescue"
+
+    fun translateTechnicalTerm(rawLabel: String): String {
+        return rawLabel
+            .replace("Tailscale Auto-SSO", HEARTH_KEY_LABEL, ignoreCase = true)
+            .replace("Node.StableID", HEARTH_KEY_LABEL, ignoreCase = true)
+            .replace("aegisEnvelopeV1", TIME_MACHINE_VAULTS_LABEL, ignoreCase = true)
+            .replace("AES-256-GCM Save Slots", TIME_MACHINE_VAULTS_LABEL, ignoreCase = true)
+            .replace("HOST_LOCAL_PC", HOST_FROM_MY_DESK_LABEL, ignoreCase = true)
+            .replace("HOST_LOCAL_DEVICE", HOST_FROM_MY_DESK_LABEL, ignoreCase = true)
+            .replace("LAUNCH_U2_HOSTING_SERVICE", OPEN_FAMILY_CLOUD_ROOM_LABEL, ignoreCase = true)
+            .replace("ZT-6", FRIENDLY_GUIDE_CARD_LABEL, ignoreCase = true)
+            .replace("Z_1440 Curfew", STARLIGHT_QUIET_HOURS_LABEL, ignoreCase = true)
+            .replace("CMY Rupees", STARLIGHT_RUPEES_RELICS_LABEL, ignoreCase = true)
+    }
+
+    fun toFriendlyGuideCard(
+        rawNoticeOrError: String,
+        preferredActionLabel: String = "Keep Exploring Together"
+    ): FriendlyGuideCardState {
+        val clean = rawNoticeOrError.trim().ifBlank {
+            "Our Sanctuary library is running in cozy local desk mode right now."
+        }
+        val isQuietHours = clean.contains("curfew", ignoreCase = true) ||
+            clean.contains("1440", ignoreCase = true) ||
+            clean.contains("quiet", ignoreCase = true)
+        val isCloudFallback = clean.contains("offline", ignoreCase = true) ||
+            clean.contains("timeout", ignoreCase = true) ||
+            clean.contains("fallback", ignoreCase = true) ||
+            clean.contains("unreachable", ignoreCase = true)
+
+        val whatHappened = when {
+            isQuietHours ->
+                "$STARLIGHT_QUIET_HOURS_LABEL is active for cozy evening rest."
+            isCloudFallback ->
+                "We switched to your local Desk Library while the Family Cloud Room catches its breath."
+            else ->
+                translateTechnicalTerm(clean)
+        }
+        val whyItHappened = when {
+            isQuietHours ->
+                "Starlight Quiet Hours help everyone recharge before tomorrow's next chapter."
+            isCloudFallback ->
+                "Your Hearth Key checked the cloud room and instantly opened a safe local path so nothing slows you down."
+            else ->
+                "Your Hearth Key and Time-Machine Memory Vaults keep your reading room and family party in sync."
+        }
+        return FriendlyGuideCardState(
+            title = FRIENDLY_GUIDE_CARD_LABEL,
+            whatHappened = whatHappened,
+            whyItHappened = whyItHappened,
+            yourProgressIsSafe = "Every stamped quote, Starlight Rupee, and Time-Machine Memory Vault is safely saved on your desk.",
+            oneClickNextStepLabel = preferredActionLabel
+        )
+    }
+}
+
+/**
+ * 4-Part Friendly Guide Card replacing cold ZT-6 technical error or status banners.
+ */
+data class FriendlyGuideCardState(
+    val title: String = DisneyImagineeringTranslator.FRIENDLY_GUIDE_CARD_LABEL,
+    val whatHappened: String,
+    val whyItHappened: String,
+    val yourProgressIsSafe: String = "Every stamped quote, Starlight Rupee, and Time-Machine Memory Vault is safely saved.",
+    val oneClickNextStepLabel: String = "Continue Reading"
+)
+
+/**
+ * Default `zt9_comfort_overrides` Family-Friendly Arcade Mode so Ring 1 (Child) through
+ * Ring 4 (Owner) players can play BoxBoy-Zombies and Boxhead-Fort together comfortably.
+ */
+data class Zt9ComfortOverrides(
+    val schemaKey: String = "zt9_comfort_overrides",
+    val familyFriendlyArcadeMode: Boolean = true,
+    val enemyFramingLabel: String = "Cardboard Critters / Neon Arcade Bots",
+    val eliminationFramingLabel: String = "Confetti KOs",
+    val coOpReviveFramingLabel: String = "Tag-Team Rescue",
+    val ring1ToRing3HarmonyBadge: String = "All-Ages Ring 1-4 Harmony Active"
+)
+
+/**
+ * 7-Destination "Switch Wing / Return to TrashArcade Hall" selector in the persistent top ribbon.
+ */
+enum class OasisHallDestination(
+    val displayLabel: String,
+    val wireSlug: String,
+    val mappedWing: TrilogyWing?,
+    val isArcadeHallCabinet: Boolean,
+    val subtitle: String,
+    val comfortModeSummary: String
+) {
+    COMMONPLACE_WING_I(
+        displayLabel = "Commonplace Wing I",
+        wireSlug = "commonplace-codex",
+        mappedWing = TrilogyWing.WING_I_COMMONPLACE,
+        isArcadeHallCabinet = false,
+        subtitle = "Literary Quotes, Epigraphs, World Map & Family Salon",
+        comfortModeSummary = "Warm Porch Sanctuary • Hearth Key Active"
+    ),
+    SCRIPTORIUM_WING_II(
+        displayLabel = "Scriptorium Wing II",
+        wireSlug = "lfs-quest-part-1",
+        mappedWing = TrilogyWing.WING_II_SCRIPTORIUM_PART1,
+        isArcadeHallCabinet = false,
+        subtitle = "Keep Chronicles, Forum Board & PowerBlocks Pipeline",
+        comfortModeSummary = "Collaborative Story Workshop • All-Ages Safe"
+    ),
+    CHAPTERHOUSE_WING_III(
+        displayLabel = "Chapterhouse Wing III",
+        wireSlug = "lfs-quest-part-2",
+        mappedWing = TrilogyWing.WING_III_CHAPTERHOUSE_PART2,
+        isArcadeHallCabinet = false,
+        subtitle = "Guild Chapterhouse, Co-Op Boss Challenge & Time-Machine Vaults",
+        comfortModeSummary = "Tag-Team Co-Op • Confetti Finishes"
+    ),
+    VIGIL_3D_WING_IV(
+        displayLabel = "3D Vigil Wing IV",
+        wireSlug = "lfs-quest-part-3",
+        mappedWing = TrilogyWing.WING_IV_OBSIDIAN_DESK_PART3,
+        isArcadeHallCabinet = false,
+        subtitle = "Candlelit Mahogany Desk, Adventurer Roster & Wonder Bestiary",
+        comfortModeSummary = "Cozy Lantern Study • Wonder Relics"
+    ),
+    CODE_RUNNER(
+        displayLabel = "Code Runner",
+        wireSlug = "code-runner",
+        mappedWing = null,
+        isArcadeHallCabinet = true,
+        subtitle = "TrashArcade Logic Sprint • Neon Arcade Bots & Starlight Rupees",
+        comfortModeSummary = "Neon Arcade Bots • Puzzle Dash • Tag-Team Boosts"
+    ),
+    BOXHEAD_FORT(
+        displayLabel = "Boxhead Fort",
+        wireSlug = "boxhead-fort",
+        mappedWing = null,
+        isArcadeHallCabinet = true,
+        subtitle = "Co-Op Pillow & Cardboard Fort Defense • Confetti KOs",
+        comfortModeSummary = "zt9_comfort_overrides: Cardboard Critters / Neon Arcade Bots / Confetti KOs / Tag-Team Rescue"
+    ),
+    BOXBOY_DEFENSE(
+        displayLabel = "BoxBoy Defense",
+        wireSlug = "boxboy-defense",
+        mappedWing = null,
+        isArcadeHallCabinet = true,
+        subtitle = "BoxBoy-Zombies Family Edition • Tag-Team Rescue & Wonder Relics",
+        comfortModeSummary = "zt9_comfort_overrides: Cardboard Critters / Neon Arcade Bots / Confetti KOs / Tag-Team Rescue"
+    )
+}
+
+/**
+ * 16-Channel Rmblyn Family Chat message (`#01`..`#16`) with `@willow`, `@cinder`, and `@mote` companions.
+ */
+data class RmblynChannelMessage(
+    val id: String,
+    val channelNumber: Int,
+    val channelName: String,
+    val senderHandle: String,
+    val text: String,
+    val timestampEpochMs: Long = System.currentTimeMillis(),
+    val isCompanionReply: Boolean = false
+)
+
+/**
+ * AudioBookshelf & OpenAudible Sanctuary Storyteller (`cb64f9e7`) chapter model.
+ */
+data class SanctuaryStorytellerChapter(
+    val key: String,
+    val title: String,
+    val bookTitle: String,
+    val author: String,
+    val durationSeconds: Int,
+    val streamPath: String,
+    val narrationTranscript: String
+)
+
+/**
+ * Persistent state for the AudioBookshelf & OpenAudible Sanctuary Storyteller Pill (`cb64f9e7`).
+ */
+data class SanctuaryStorytellerState(
+    val serviceId: String = "cb64f9e7",
+    val libraryEndpoint: String = "/api/lfs/openaudible/library",
+    val streamEndpointTemplate: String = "/api/lfs/openaudible/stream/[key]",
+    val handshakeEndpoint: String = "http://100.106.12.104:13379/lfs-sso/handshake",
+    val isPlaying: Boolean = false,
+    val activeChapterKey: String = "ch_01_lantern_porch",
+    val chapters: List<SanctuaryStorytellerChapter> = defaultSanctuaryChapters(),
+    val sleepFadeTimerMinutes: Int? = 30,
+    val sleepFadeRemainingSeconds: Int = 30 * 60,
+    val playbackElapsedSeconds: Int = 42,
+    val isOfflineSampleFallback: Boolean = false,
+    val statusBadge: String = "Sanctuary Storyteller (cb64f9e7) • Hearth Key Stream Ready"
+) {
+    fun activeChapter(): SanctuaryStorytellerChapter {
+        return chapters.firstOrNull { it.key == activeChapterKey } ?: chapters.first()
+    }
+
+    companion object {
+        val SLEEP_TIMER_PRESETS_MINUTES = listOf(15, 30, 45)
+
+        fun defaultSanctuaryChapters(): List<SanctuaryStorytellerChapter> = listOf(
+            SanctuaryStorytellerChapter(
+                key = "ch_01_lantern_porch",
+                title = "Ch. 1 — The Lantern on the Sanctuary Porch",
+                bookTitle = "Chronicles of the Commonplace Porch",
+                author = "Seneca & M. Aurelius (Family Audible Edition)",
+                durationSeconds = 940,
+                streamPath = "/api/lfs/openaudible/stream/ch_01_lantern_porch",
+                narrationTranscript = "Every evening before Starlight Quiet Hours, the porch lantern warms the mahogany desk. What we write together in our Commonplace Book becomes a compass for tomorrow's adventure."
+            ),
+            SanctuaryStorytellerChapter(
+                key = "ch_02_infinite_library",
+                title = "Ch. 2 — Gardens of the Infinite Library",
+                bookTitle = "Labyrinths of Wonder",
+                author = "Jorge Luis Borges & E. Dickinson",
+                durationSeconds = 1120,
+                streamPath = "/api/lfs/openaudible/stream/ch_02_infinite_library",
+                narrationTranscript = "I have always imagined that Paradise will be a kind of library—where every shelf holds a doorway to a friendly realm and every margin carries a note from someone you love."
+            ),
+            SanctuaryStorytellerChapter(
+                key = "ch_03_starlight_voyage",
+                title = "Ch. 3 — Starlight Quiet Hours & The Dreaming Keep",
+                bookTitle = "LFS Oasis Bedtime Anthology",
+                author = "Sanctuary Storyteller Guild",
+                durationSeconds = 1350,
+                streamPath = "/api/lfs/openaudible/stream/ch_03_starlight_voyage",
+                narrationTranscript = "As the 30-minute Starlight Sleep-Fade gently dims the lanterns, Willow, Cinder, and Mote tuck today's Wonder Relics into the Time-Machine Memory Vaults for safe keeping."
+            )
+        )
+    }
+}
+
+/**
  * Master state envelope tracking the unified Commonplace & LFS-Quest Trilogy across all 4 wings,
- * Tailscale Zero-Trust Handshake, TrashArcade Rupee Satchel, and 20-Slot Aegis Save Ledger.
+ * Tailscale Zero-Trust Handshake, TrashArcade Rupee Satchel, 20-Slot Time-Machine Memory Vaults,
+ * Uninterrupted Top Shell Ribbon (`OasisMultiplayerBar`), and Sanctuary Storyteller (`cb64f9e7`).
  */
 data class CommonplaceTrilogySyncEnvelopeV1(
     val schemaVersion: String = "commonplace.trilogy.sync.v1",
     val capsuleTarget: String = "lfs-trash-arcade",
     val cartridgeSlug: String = "commonplace-codex",
     val activeWing: TrilogyWing = TrilogyWing.WING_I_COMMONPLACE,
+    val activeHallDestination: OasisHallDestination = OasisHallDestination.COMMONPLACE_WING_I,
     val activeRoomCode: String = "OASIS-7K9M",
     val serverPreset: LfsServerPreset = LfsServerPreset.TAILSCALE_ANCHOR_PROD,
     val handshake: TailscaleHandshakeResult = TailscaleHandshakeResult(),
@@ -1711,13 +1962,13 @@ data class CommonplaceTrilogySyncEnvelopeV1(
     val wing2ChronicleQueue: List<String> = listOf(
         "Keep Chronicle #14: Seneca's Epistemic Vigil in the North Scriptorium",
         "PowerBlocks Pipeline: Compile Stoic Marginalia into Guild Edict IV",
-        "Forum Board Thread: 'Does imagination amplify the Raid Boss aura?'"
+        "Forum Board Thread: 'How do Wonder Relics boost our Tag-Team Rescue?'"
     ),
-    val wing3RaidBossName: String = "Arch-oleth the Uncatalogued (HP 74%)",
+    val wing3RaidBossName: String = "Arch-oleth the Uncatalogued (Friendly Challenge 74%)",
     val wing3RaidHpPercent: Int = 74,
     val wing3ActiveMissions: List<String> = listOf(
         "Chapterhouse Contract: Deliver 3 Stamped Folios to the Intel Lab",
-        "Co-Op Raid Strike: Channel Arcane Doctrine against Arch-oleth"
+        "Tag-Team Co-Op Strike: Channel Arcane Doctrine for a Confetti KO"
     ),
     val wing4DeskArtifacts: List<String> = listOf(
         "Mahogany Desk Ledger • Candlelit Quill & Brass Astrolabe",
@@ -1726,11 +1977,67 @@ data class CommonplaceTrilogySyncEnvelopeV1(
     ),
     val saveSlots: List<AegisSaveSlotSummary> = defaultTwentySaveSlots(),
     val selectedSaveSlotKey: String = "slot_01",
-    val lastRmblynCommandResult: String = "Rmblyn Overlay Ready • Channel #commonplace-codex",
-    val lastSyncStatusBanner: String = "Wing I Master Portal Active • 6-Gate Aegis Envelope Synced (slot_01)"
+    val zt9ComfortOverrides: Zt9ComfortOverrides = Zt9ComfortOverrides(),
+    val isOasisOverlayOpen: Boolean = false,
+    val isActionPhysicsPaused: Boolean = false,
+    val lastOverlayToggleEvent: String = "oasis:overlay-toggle (Shift+Tab / Ctrl+K Ready)",
+    val activeRmblynChannel: Int = 1,
+    val rmblynMessages: List<RmblynChannelMessage> = defaultRmblynMessages(),
+    val storyteller: SanctuaryStorytellerState = SanctuaryStorytellerState(),
+    val friendlyGuideCard: FriendlyGuideCardState = DisneyImagineeringTranslator.toFriendlyGuideCard(
+        "Hearth Key (Instant Family Pass) active • Time-Machine Memory Vault slot_01 ready"
+    ),
+    val lastRmblynCommandResult: String = "Rmblyn 16-Channel Family Chat Ready • @willow @cinder @mote listening",
+    val lastSyncStatusBanner: String = "Hearth Key (Instant Family Pass) Active • Time-Machine Memory Vault (slot_01) Synced"
 ) {
     companion object {
         val CANONICAL_RUPEE_VALUES = listOf(1, 5, 10, 20, 50, 100, 200, 500, 1000)
+
+        val RMBLYN_16_CHANNELS: List<Pair<Int, String>> = listOf(
+            1 to "#01-hearth-lobby",
+            2 to "#02-commonplace-wing-1",
+            3 to "#03-scriptorium-wing-2",
+            4 to "#04-chapterhouse-wing-3",
+            5 to "#05-vigil-desk-wing-4",
+            6 to "#06-code-runner-sprint",
+            7 to "#07-boxhead-fort-coop",
+            8 to "#08-boxboy-defense-rescue",
+            9 to "#09-willow-library-help",
+            10 to "#10-cinder-forge-tips",
+            11 to "#11-mote-starlight-tales",
+            12 to "#12-storyteller-book-club",
+            13 to "#13-wonder-relic-trades",
+            14 to "#14-world-map-postcards",
+            15 to "#15-salon-trivia-party",
+            16 to "#16-quiet-hours-lounge"
+        )
+
+        fun defaultRmblynMessages(): List<RmblynChannelMessage> = listOf(
+            RmblynChannelMessage(
+                id = "rmb_seed_1",
+                channelNumber = 1,
+                channelName = "#01-hearth-lobby",
+                senderHandle = "@willow",
+                text = "Welcome to Room OASIS-7K9M! Your Hearth Key (Instant Family Pass) is active across all 4 Wings and the TrashArcade Hall.",
+                isCompanionReply = true
+            ),
+            RmblynChannelMessage(
+                id = "rmb_seed_2",
+                channelNumber = 1,
+                channelName = "#01-hearth-lobby",
+                senderHandle = "@cinder",
+                text = "Family-Friendly Arcade Mode (zt9_comfort_overrides) is ON: Cardboard Critters, Neon Arcade Bots, Confetti KOs, and Tag-Team Rescue are ready!",
+                isCompanionReply = true
+            ),
+            RmblynChannelMessage(
+                id = "rmb_seed_3",
+                channelNumber = 1,
+                channelName = "#01-hearth-lobby",
+                senderHandle = "@mote",
+                text = "Tip: Press Shift+Tab or Ctrl+K anytime to pause single-player action physics while chatting or switching wings.",
+                isCompanionReply = true
+            )
+        )
 
         fun defaultRupeeSatchel(totalAmount: Int = 486): List<RupeeGemDenomination> {
             return listOf(
@@ -1751,7 +2058,7 @@ data class CommonplaceTrilogySyncEnvelopeV1(
                 slug = "porch-chronicler-quill",
                 title = "Porch Chronicler's Quill",
                 originWing = "Wing I • Commonplace Book",
-                effectDescription = "Inscribes provenance timestamps into Guild Quest Directives (+15% Gold on Save)",
+                effectDescription = "Inscribes provenance timestamps into Guild Quest Directives (+15% Starlight Rupees on Save)",
                 isUnlocked = true
             ),
             TrashArcadeRelic(
@@ -1765,14 +2072,14 @@ data class CommonplaceTrilogySyncEnvelopeV1(
                 slug = "undercity-delver-torch",
                 title = "Undercity Delver's Torch",
                 originWing = "Wing III • Chapterhouse Part 2",
-                effectDescription = "Illuminates hidden Co-Op Raid weak points during overnight Z_1440 curfews",
+                effectDescription = "Illuminates friendly Tag-Team Rescue paths during Starlight Quiet Hours",
                 isUnlocked = true
             ),
             TrashArcadeRelic(
                 slug = "willow-visor-emerald",
                 title = "Willow's Visor Emerald",
                 originWing = "Wing IV • Obsidian Vigil Part 3",
-                effectDescription = "Reveals Bestiary lore seeds on the 3D Mahogany Guild Desk",
+                effectDescription = "Reveals Wonder Relic lore seeds on the 3D Mahogany Guild Desk",
                 isUnlocked = true
             )
         )
@@ -1789,10 +2096,10 @@ data class CommonplaceTrilogySyncEnvelopeV1(
                 goldReward = 50,
                 rupeeReward = 25,
                 reputationReward = 15,
-                bestiarySeed = "Phantasm of Unfounded Dread",
-                forumPromptTitle = "Stoic Vanguard: Overcoming Imaginary Dread Before the Raid",
+                bestiarySeed = "Friendly Stoic Guardian",
+                forumPromptTitle = "Stoic Vanguard: Sharing Courage Before the Co-Op Challenge",
                 scriptoriumTaskLabel = "Transcribe Letter XIII into Keep Chronicle #15",
-                raidMissionBrief = "Vanguard Strike: Dispel illusionary debuffs on the Chapterhouse frontline"
+                raidMissionBrief = "Tag-Team Boost: Cheer on your party at the Chapterhouse"
             ),
             CommonplaceQuestDirectiveV1(
                 directiveId = "dir_borges_labyrinth_02",
@@ -1808,7 +2115,7 @@ data class CommonplaceTrilogySyncEnvelopeV1(
                 bestiarySeed = "Hexagonal Archivist Automaton",
                 forumPromptTitle = "Labyrinthine Stacks: Mapping the Infinite Scriptorium",
                 scriptoriumTaskLabel = "Index Hexagonal Gallery Folios in PowerBlocks",
-                raidMissionBrief = "Stealth Recon: Navigate the Library Vaults undetected"
+                raidMissionBrief = "Lantern Recon: Explore the Library Vaults together"
             )
         )
 
@@ -1818,7 +2125,7 @@ data class CommonplaceTrilogySyncEnvelopeV1(
                 if (idx == 1) {
                     AegisSaveSlotSummary(
                         slotKey = slotKey,
-                        label = "Slot 01 • Primary Auto-Sync Ledger",
+                        label = "Vault 01 • Primary Time-Machine Memory Vault",
                         isOccupied = true,
                         updatedAtEpochMs = System.currentTimeMillis(),
                         activeDoctrine = PhilosophicalDoctrine.ARCANE.wireId,
@@ -1831,7 +2138,7 @@ data class CommonplaceTrilogySyncEnvelopeV1(
                 } else {
                     AegisSaveSlotSummary(
                         slotKey = slotKey,
-                        label = String.format(java.util.Locale.US, "Slot %02d • Archival Vault", idx),
+                        label = String.format(java.util.Locale.US, "Vault %02d • Time-Machine Memory Vault", idx),
                         isOccupied = false
                     )
                 }

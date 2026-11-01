@@ -73,8 +73,16 @@ import com.example.network.QuoteAudioAndVoiceService
 import com.example.ui.AccessibilityAndQolSheet
 import com.example.ui.CommonplaceViewModel
 import com.example.ui.FamilyCircleScreen
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import com.example.ui.LibraryScreen
 import com.example.ui.MapDiscoveryScreen
+import com.example.ui.OasisMultiplayerBar
 import com.example.ui.QuestTrilogyCodexSheet
 import com.example.ui.QuoteDiscoveryScreen
 import com.example.ui.QuoteDossierSheet
@@ -209,105 +217,131 @@ fun CommonplaceAppShell(
         accessibilitySettings = accessibilitySettings
     ) {
         Scaffold(
+            modifier = Modifier.onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) {
+                    val isShiftTab = event.isShiftPressed && event.key == Key.Tab
+                    val isCtrlK = event.isCtrlPressed && event.key == Key.K
+                    if (isShiftTab || isCtrlK) {
+                        val trigger = if (isShiftTab) "oasis:overlay-toggle (Shift+Tab)" else "oasis:overlay-toggle (Ctrl+K)"
+                        viewModel.toggleOasisOverlay(trigger)
+                        return@onPreviewKeyEvent true
+                    }
+                }
+                false
+            },
             contentWindowInsets = WindowInsets.safeDrawing,
             topBar = {
-                TopAppBar(
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.FormatQuote,
-                                contentDescription = "Commonplace logo",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(26.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Column {
-                                Text(
-                                    text = stringResource(R.string.app_name),
-                                    style = MaterialTheme.typography.headlineSmall
+                Column {
+                    OasisMultiplayerBar(
+                        envelope = trilogyState,
+                        onSelectHallDestination = viewModel::selectOasisHallDestination,
+                        onToggleOasisOverlay = viewModel::toggleOasisOverlay,
+                        onToggleZt9ComfortMode = viewModel::toggleZt9ComfortOverrides,
+                        onSelectRmblynChannel = viewModel::selectRmblynChannel,
+                        onSendRmblynChatMessage = viewModel::sendRmblynFamilyChatMessage,
+                        onToggleStorytellerPlayPause = viewModel::toggleSanctuaryStorytellerPlayPause,
+                        onSelectStorytellerChapter = viewModel::selectSanctuaryChapter,
+                        onSetSleepFadeTimerMinutes = viewModel::setStarlightSleepFadeTimer,
+                        onOpenCodexDrawer = { showTrilogyCodexSheet = true }
+                    )
+                    TopAppBar(
+                        title = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.FormatQuote,
+                                    contentDescription = "Commonplace logo",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(26.dp)
                                 )
-                                Text(
-                                    text = userEmail,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = stringResource(R.string.app_name),
+                                        style = MaterialTheme.typography.headlineSmall
+                                    )
+                                    Text(
+                                        text = userEmail,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        },
+                        actions = {
+                            AssistChip(
+                                onClick = { showTrilogyCodexSheet = true },
+                                label = {
+                                    Text(
+                                        text = trilogyState.activeHallDestination.displayLabel,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Hub,
+                                        contentDescription = "Open Quest Trilogy Codex & TrashArcade Bridge",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                modifier = Modifier.testTag("top_bar_trilogy_codex_button")
+                            )
+                            IconButton(
+                                onClick = { currentTab = 5 },
+                                modifier = Modifier.testTag("top_bar_visual_muse_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ImageSearch,
+                                    contentDescription = stringResource(R.string.tab_visual_muse)
                                 )
                             }
-                        }
-                    },
-                    actions = {
-                        AssistChip(
-                            onClick = { showTrilogyCodexSheet = true },
-                            label = {
-                                Text(
-                                    text = trilogyState.activeWing.wingNumber,
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            },
-                            leadingIcon = {
+                            AssistChip(
+                                onClick = { viewModel.toggleHighContrastMode() },
+                                label = {
+                                    Text(
+                                        if (accessibilitySettings.highContrastEnabled) "AAA ON" else "Contrast",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Contrast,
+                                        contentDescription = "Toggle High Contrast Mode",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                modifier = Modifier.testTag("quick_high_contrast_chip")
+                            )
+                            IconButton(
+                                onClick = { showAccessibilitySheet = true },
+                                modifier = Modifier.testTag("accessibility_mode_button")
+                            ) {
                                 Icon(
-                                    imageVector = Icons.Default.Hub,
-                                    contentDescription = "Open Quest Trilogy Codex & TrashArcade Bridge",
-                                    modifier = Modifier.size(16.dp)
+                                    imageVector = Icons.Default.AccessibilityNew,
+                                    contentDescription = "High Contrast & Accessibility Settings"
                                 )
-                            },
-                            modifier = Modifier.testTag("top_bar_trilogy_codex_button")
-                        )
-                        IconButton(
-                            onClick = { currentTab = 5 },
-                            modifier = Modifier.testTag("top_bar_visual_muse_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ImageSearch,
-                                contentDescription = stringResource(R.string.tab_visual_muse)
-                            )
-                        }
-                        AssistChip(
-                            onClick = { viewModel.toggleHighContrastMode() },
-                            label = {
-                                Text(
-                                    if (accessibilitySettings.highContrastEnabled) "AAA ON" else "Contrast",
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            },
-                            leadingIcon = {
+                            }
+                            IconButton(
+                                onClick = {
+                                    signOutUser(
+                                        context = context,
+                                        onSignOutComplete = {},
+                                        scope = scope
+                                    )
+                                },
+                                modifier = Modifier.testTag("sign_out_button")
+                            ) {
                                 Icon(
-                                    imageVector = Icons.Default.Contrast,
-                                    contentDescription = "Toggle High Contrast Mode",
-                                    modifier = Modifier.size(16.dp)
+                                    imageVector = Icons.AutoMirrored.Filled.Logout,
+                                    contentDescription = stringResource(R.string.sign_out_label)
                                 )
-                            },
-                            modifier = Modifier.testTag("quick_high_contrast_chip")
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.background,
+                            titleContentColor = MaterialTheme.colorScheme.onBackground
                         )
-                        IconButton(
-                            onClick = { showAccessibilitySheet = true },
-                            modifier = Modifier.testTag("accessibility_mode_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AccessibilityNew,
-                                contentDescription = "High Contrast & Accessibility Settings"
-                            )
-                        }
-                        IconButton(
-                            onClick = {
-                                signOutUser(
-                                    context = context,
-                                    onSignOutComplete = {},
-                                    scope = scope
-                                )
-                            },
-                            modifier = Modifier.testTag("sign_out_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Logout,
-                                contentDescription = stringResource(R.string.sign_out_label)
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                        titleContentColor = MaterialTheme.colorScheme.onBackground
                     )
-                )
+                }
             },
             bottomBar = {
                 NavigationBar(

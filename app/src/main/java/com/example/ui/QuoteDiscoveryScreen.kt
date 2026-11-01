@@ -80,6 +80,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.R
+import com.example.data.DisneyImagineeringTranslator
 import com.example.data.FamilyCircle
 import com.example.data.PriorityMode
 import com.example.data.PriorityScoredQuote
@@ -173,42 +174,22 @@ fun QuoteDiscoveryScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            // Status Banner for Stamp Save, Family Circle Share, or AI Discovery
+            // 4-Part Friendly Guide Card replacing cold ZT-6 technical status/error banners
             AnimatedVisibility(visible = state.statusBannerMessage != null) {
                 state.statusBannerMessage?.let { msg ->
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
-                        ),
-                        shape = RoundedCornerShape(12.dp),
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(bottom = 12.dp)
                             .testTag("discovery_status_banner")
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.LocationOn,
-                                contentDescription = "Stamp notification",
-                                tint = MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = msg,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.weight(1f)
-                            )
-                            TextButton(onClick = onDismissStatusBanner) {
-                                Text("Dismiss")
-                            }
-                        }
+                        FriendlyGuideCard(
+                            guide = DisneyImagineeringTranslator.toFriendlyGuideCard(
+                                rawNoticeOrError = msg,
+                                preferredActionLabel = "Dismiss & Keep Reading"
+                            ),
+                            onNextStepClick = onDismissStatusBanner
+                        )
                     }
                 }
             }

@@ -309,7 +309,89 @@ class ExampleUnitTest {
         assertTrue(directive.rupeeReward > 0)
         assertEquals("http://100.106.12.104:13379/lfs-sso/handshake", LfsServerPreset.TAILSCALE_ANCHOR_PROD.handshakeUrl)
     }
+
+    @Test
+    fun disneyImagineeringTranslator_oasisRibbon_andSanctuaryStoryteller_satisfyAllAgesInvariants() {
+        // 1. Disney Imagineering Engagement Translator (Grade <= 8.0) vocabulary
+        assertEquals(
+            "Hearth Key (Instant Family Pass)",
+            com.example.data.DisneyImagineeringTranslator.HEARTH_KEY_LABEL
+        )
+        assertEquals(
+            "Time-Machine Memory Vaults",
+            com.example.data.DisneyImagineeringTranslator.TIME_MACHINE_VAULTS_LABEL
+        )
+        assertEquals(
+            "Host From My Desk",
+            com.example.data.LfsHostMode.HOST_LOCAL_DEVICE.label
+        )
+        assertEquals(
+            "Open a Family Cloud Room",
+            com.example.data.LfsHostMode.LAUNCH_U2_HOSTING_SERVICE.label
+        )
+        assertEquals(
+            "Starlight Quiet Hours (Rest & Recharge Time)",
+            com.example.data.DisneyImagineeringTranslator.STARLIGHT_QUIET_HOURS_LABEL
+        )
+        assertEquals(
+            "Starlight Rupees & Wonder Relics",
+            com.example.data.DisneyImagineeringTranslator.STARLIGHT_RUPEES_RELICS_LABEL
+        )
+
+        // 2. 4-Part Friendly Guide Cards replacing ZT-6 technical error banners
+        val guide = com.example.data.DisneyImagineeringTranslator.toFriendlyGuideCard(
+            rawNoticeOrError = "ZT-6 network offline fallback for aegisEnvelopeV1",
+            preferredActionLabel = "Keep Exploring Together"
+        )
+        assertEquals("Friendly Guide Cards", guide.title)
+        assertTrue(guide.whatHappened.isNotBlank())
+        assertTrue(guide.whyItHappened.isNotBlank())
+        assertTrue(guide.yourProgressIsSafe.contains("Time-Machine Memory Vault"))
+        assertEquals("Keep Exploring Together", guide.oneClickNextStepLabel)
+
+        // 3. Default zt9_comfort_overrides Family-Friendly Arcade Mode
+        val envelope = com.example.data.CommonplaceTrilogySyncEnvelopeV1()
+        assertTrue(envelope.zt9ComfortOverrides.familyFriendlyArcadeMode)
+        assertEquals("zt9_comfort_overrides", envelope.zt9ComfortOverrides.schemaKey)
+        assertEquals("Cardboard Critters / Neon Arcade Bots", envelope.zt9ComfortOverrides.enemyFramingLabel)
+        assertEquals("Confetti KOs", envelope.zt9ComfortOverrides.eliminationFramingLabel)
+        assertEquals("Tag-Team Rescue", envelope.zt9ComfortOverrides.coOpReviveFramingLabel)
+
+        // 4. 7-Destination Switch Wing / Return to TrashArcade Hall selector & 16-Channel Rmblyn Chat
+        val hallLabels = com.example.data.OasisHallDestination.entries.map { it.displayLabel }
+        assertEquals(
+            listOf(
+                "Commonplace Wing I",
+                "Scriptorium Wing II",
+                "Chapterhouse Wing III",
+                "3D Vigil Wing IV",
+                "Code Runner",
+                "Boxhead Fort",
+                "BoxBoy Defense"
+            ),
+            hallLabels
+        )
+        assertEquals(16, com.example.data.CommonplaceTrilogySyncEnvelopeV1.RMBLYN_16_CHANNELS.size)
+        val seededHandles = envelope.rmblynMessages.map { it.senderHandle }.toSet()
+        assertTrue(seededHandles.containsAll(listOf("@willow", "@cinder", "@mote")))
+
+        // 5. AudioBookshelf & OpenAudible Sanctuary Storyteller (cb64f9e7)
+        val storyteller = envelope.storyteller
+        assertEquals("cb64f9e7", storyteller.serviceId)
+        assertEquals("/api/lfs/openaudible/library", storyteller.libraryEndpoint)
+        assertEquals("/api/lfs/openaudible/stream/[key]", storyteller.streamEndpointTemplate)
+        assertEquals(listOf(15, 30, 45), com.example.data.SanctuaryStorytellerState.SLEEP_TIMER_PRESETS_MINUTES)
+        val client = OasisCommonplaceServerClient()
+        assertEquals(
+            "https://lfs-prod.tail420c4d.ts.net/api/lfs/openaudible/stream/ch_01_lantern_porch",
+            client.buildOpenAudibleStreamUrl(
+                baseUrl = LfsServerPreset.TAILSCALE_ANCHOR_PROD.baseUrl,
+                chapterKey = "ch_01_lantern_porch"
+            )
+        )
+    }
 }
+
 
 
 

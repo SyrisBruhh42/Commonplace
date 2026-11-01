@@ -68,12 +68,16 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import com.example.R
 import com.example.data.CommonplaceTrilogySyncEnvelopeV1
+import com.example.data.DisneyImagineeringTranslator
 import com.example.data.LfsServerPreset
 import com.example.data.NativeArcadeAssetBridge
+import com.example.data.RmblynChannelMessage
 import com.example.data.SeedQuoteCatalog
 import com.example.data.TrilogyWing
 import com.example.network.OasisCommonplaceServerClient
+import com.example.ui.FriendlyGuideCard
 import com.example.ui.MasterPortalTrilogyCard
+import com.example.ui.OasisMultiplayerBar
 import com.example.ui.QuestTrilogyCodexSheet
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
@@ -231,21 +235,92 @@ fun LoginScreen(
             .testTag("login_screen_root"),
         color = MaterialTheme.colorScheme.background
     ) {
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing),
-            contentAlignment = Alignment.Center
+                .windowInsetsPadding(WindowInsets.safeDrawing)
         ) {
-            Column(
+            OasisMultiplayerBar(
+                envelope = portalTrilogyEnvelope,
+                onSelectHallDestination = { dest ->
+                    portalTrilogyEnvelope = portalTrilogyEnvelope.copy(
+                        activeHallDestination = dest,
+                        activeWing = dest.mappedWing ?: portalTrilogyEnvelope.activeWing,
+                        lastSyncStatusBanner = "Switched to ${dest.displayLabel}"
+                    )
+                },
+                onToggleOasisOverlay = { trigger ->
+                    val nextOpen = !portalTrilogyEnvelope.isOasisOverlayOpen
+                    portalTrilogyEnvelope = portalTrilogyEnvelope.copy(
+                        isOasisOverlayOpen = nextOpen,
+                        isActionPhysicsPaused = nextOpen,
+                        lastOverlayToggleEvent = trigger
+                    )
+                },
+                onToggleZt9ComfortMode = { enabled ->
+                    portalTrilogyEnvelope = portalTrilogyEnvelope.copy(
+                        zt9ComfortOverrides = portalTrilogyEnvelope.zt9ComfortOverrides.copy(
+                            familyFriendlyArcadeMode = enabled
+                        )
+                    )
+                },
+                onSelectRmblynChannel = { ch ->
+                    portalTrilogyEnvelope = portalTrilogyEnvelope.copy(activeRmblynChannel = ch)
+                },
+                onSendRmblynChatMessage = { msg ->
+                    val chNum = portalTrilogyEnvelope.activeRmblynChannel
+                    val chName = CommonplaceTrilogySyncEnvelopeV1.RMBLYN_16_CHANNELS
+                        .firstOrNull { it.first == chNum }?.second ?: "#01-hearth-lobby"
+                    val newMsg = RmblynChannelMessage(
+                        id = "rmb_login_${System.currentTimeMillis()}",
+                        channelNumber = chNum,
+                        channelName = chName,
+                        senderHandle = "@porch-guest",
+                        text = msg
+                    )
+                    portalTrilogyEnvelope = portalTrilogyEnvelope.copy(
+                        rmblynMessages = portalTrilogyEnvelope.rmblynMessages + newMsg
+                    )
+                },
+                onToggleStorytellerPlayPause = {
+                    val cur = portalTrilogyEnvelope.storyteller
+                    portalTrilogyEnvelope = portalTrilogyEnvelope.copy(
+                        storyteller = cur.copy(isPlaying = !cur.isPlaying)
+                    )
+                },
+                onSelectStorytellerChapter = { key ->
+                    val cur = portalTrilogyEnvelope.storyteller
+                    portalTrilogyEnvelope = portalTrilogyEnvelope.copy(
+                        storyteller = cur.copy(activeChapterKey = key)
+                    )
+                },
+                onSetSleepFadeTimerMinutes = { mins ->
+                    val cur = portalTrilogyEnvelope.storyteller
+                    portalTrilogyEnvelope = portalTrilogyEnvelope.copy(
+                        storyteller = cur.copy(
+                            sleepFadeTimerMinutes = mins ?: 30,
+                            sleepFadeRemainingSeconds = (mins ?: 30) * 60
+                        )
+                    )
+                },
+                onOpenCodexDrawer = { showTrilogyCodexSheet = true }
+            )
+
+            Box(
                 modifier = Modifier
-                    .widthIn(max = 520.dp)
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .fillMaxSize()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
             ) {
-                EditorialCrestBanner()
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = 520.dp)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 24.dp, vertical = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    EditorialCrestBanner()
 
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -346,20 +421,18 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(20.dp))
 
                 if (errorMessage != null) {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        ),
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(bottom = 16.dp)
                             .testTag("login_error_banner")
                     ) {
-                        Text(
-                            text = errorMessage!!,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.padding(14.dp)
+                        FriendlyGuideCard(
+                            guide = DisneyImagineeringTranslator.toFriendlyGuideCard(
+                                rawNoticeOrError = errorMessage!!,
+                                preferredActionLabel = "Try Hearth Key or Google Sign-In Again"
+                            ),
+                            onNextStepClick = { errorMessage = null }
                         )
                     }
                 }
@@ -413,12 +486,13 @@ fun LoginScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                Text(
-                    text = "Sign in with Google via Credential Manager to sync your saved quotes, TimestampInfo provenance stamps, and interest filters across devices.",
-                    style = MaterialTheme.typography.bodySmall,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                    Text(
+                        text = "Sign in with Google via Credential Manager or use your Hearth Key (Instant Family Pass) to sync your saved quotes, provenance stamps, and Time-Machine Memory Vaults.",
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
