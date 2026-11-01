@@ -1,0 +1,370 @@
+{
+  "entities": {
+    "TimestampInfo": {
+      "title": "TimestampInfo",
+      "description": "Location and date/time of capture for a saved or shared quote.",
+      "type": "object",
+      "properties": {
+        "location": {
+          "type": "string",
+          "description": "Location where the quote was captured."
+        },
+        "date": {
+          "type": "string",
+          "description": "Formatted date of capture."
+        },
+        "time": {
+          "type": "string",
+          "description": "Formatted local time of capture."
+        },
+        "capturedAt": {
+          "type": "string",
+          "description": "Combined human-readable date and time of capture."
+        }
+      },
+      "required": [
+        "location",
+        "date",
+        "time",
+        "capturedAt"
+      ]
+    },
+    "Quote": {
+      "title": "Quote",
+      "description": "A user-saved famous quote with text, author, tags, and a TimestampInfo object containing the location and date/time of capture.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated user UID who saved the quote."
+        },
+        "text": {
+          "type": "string",
+          "description": "The text of the famous quote."
+        },
+        "author": {
+          "type": "string",
+          "description": "Author of the quote."
+        },
+        "tags": {
+          "type": "array",
+          "description": "Thematic tags associated with the quote."
+        },
+        "timestampInfo": {
+          "$ref": "#/entities/TimestampInfo",
+          "description": "Location and date/time of capture."
+        },
+        "sourceWork": {
+          "type": "string",
+          "description": "Book, speech, or historical source of the quote."
+        },
+        "category": {
+          "type": "string",
+          "description": "Primary thematic category of the quote."
+        },
+        "onlinePopularityScore": {
+          "type": "integer",
+          "description": "Popularity index (0-100) representing online cultural usage."
+        },
+        "personalNote": {
+          "type": "string",
+          "description": "User marginalia or reflection note."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when saved (clients must submit FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when last updated (clients must submit FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "text",
+        "author",
+        "tags",
+        "timestampInfo",
+        "sourceWork",
+        "category",
+        "onlinePopularityScore",
+        "personalNote",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "DailyQuote": {
+      "title": "DailyQuote",
+      "description": "Daily featured quote stored in the daily_quotes collection and displayed on QuoteDiscoveryScreen.",
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "The text of the daily quote."
+        },
+        "author": {
+          "type": "string",
+          "description": "Author of the daily quote."
+        },
+        "sourceWork": {
+          "type": "string",
+          "description": "Source work of the daily quote."
+        },
+        "category": {
+          "type": "string",
+          "description": "Primary category of the daily quote."
+        },
+        "tags": {
+          "type": "array",
+          "description": "Thematic tags of the daily quote."
+        },
+        "onlinePopularityScore": {
+          "type": "integer",
+          "description": "Online popularity score (0-100)."
+        },
+        "popularOnlineContext": {
+          "type": "string",
+          "description": "Online usage context."
+        },
+        "era": {
+          "type": "string",
+          "description": "Historical era."
+        },
+        "dayKey": {
+          "type": "string",
+          "description": "Calendar day key (yyyy_MM_dd)."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when updated (clients must submit FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "text",
+        "author",
+        "sourceWork",
+        "category",
+        "tags",
+        "onlinePopularityScore",
+        "popularOnlineContext",
+        "era",
+        "dayKey",
+        "updatedAt"
+      ]
+    },
+    "FamilyCircle": {
+      "title": "FamilyCircle",
+      "description": "Zero-trust Family Social Circle restricted to Google-authenticated member UIDs and emails.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Display name of the Family Social Circle."
+        },
+        "inviteCode": {
+          "type": "string",
+          "description": "Short reference code for the circle."
+        },
+        "ownerUid": {
+          "type": "string",
+          "description": "Google UID of the circle creator."
+        },
+        "ownerEmail": {
+          "type": "string",
+          "description": "Google email of the circle creator."
+        },
+        "memberUids": {
+          "type": "array",
+          "description": "Authorized Google UIDs in the circle."
+        },
+        "memberEmails": {
+          "type": "array",
+          "description": "Authorized Google email addresses in the circle."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created (clients must submit FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when updated (clients must submit FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "name",
+        "inviteCode",
+        "ownerUid",
+        "ownerEmail",
+        "memberUids",
+        "memberEmails",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "FamilySharedQuote": {
+      "title": "FamilySharedQuote",
+      "description": "A quote shared with a Zero-Trust Family Social Circle including TimestampInfo and explicit member access control.",
+      "type": "object",
+      "properties": {
+        "circleId": {
+          "type": "string",
+          "description": "ID of the FamilyCircle."
+        },
+        "circleName": {
+          "type": "string",
+          "description": "Name of the FamilyCircle."
+        },
+        "senderUid": {
+          "type": "string",
+          "description": "Google UID of the sender."
+        },
+        "senderName": {
+          "type": "string",
+          "description": "Display name of the sender."
+        },
+        "senderEmail": {
+          "type": "string",
+          "description": "Google email of the sender."
+        },
+        "allowedMemberUids": {
+          "type": "array",
+          "description": "Explicit list of authorized Google UIDs allowed to read this shared quote."
+        },
+        "allowedEmails": {
+          "type": "array",
+          "description": "Explicit list of authorized Google emails allowed to read this shared quote."
+        },
+        "text": {
+          "type": "string",
+          "description": "Quote text."
+        },
+        "author": {
+          "type": "string",
+          "description": "Quote author."
+        },
+        "tags": {
+          "type": "array",
+          "description": "Quote tags."
+        },
+        "timestampInfo": {
+          "$ref": "#/entities/TimestampInfo",
+          "description": "Location and date/time of capture."
+        },
+        "personalNote": {
+          "type": "string",
+          "description": "Family dedication note."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when shared (clients must submit FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when updated (clients must submit FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "circleId",
+        "circleName",
+        "senderUid",
+        "senderName",
+        "senderEmail",
+        "allowedMemberUids",
+        "allowedEmails",
+        "text",
+        "author",
+        "tags",
+        "timestampInfo",
+        "personalNote",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserPreferences": {
+      "title": "UserPreferences",
+      "description": "Per-user quote priority filters, selected interests, and recent quote usage tracking.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated user UID."
+        },
+        "selectedInterests": {
+          "type": "array",
+          "description": "Selected personal interest categories for quote priority weighting."
+        },
+        "priorityMode": {
+          "type": "string",
+          "enum": [
+            "Balanced",
+            "Personal Interests",
+            "Popular Online",
+            "Recent & Trending"
+          ],
+          "description": "Active priority weighting mode."
+        },
+        "recentQuoteIds": {
+          "type": "array",
+          "description": "Rolling list of recently used/viewed quote IDs."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created (clients must submit FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when updated (clients must submit FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "selectedInterests",
+        "priorityMode",
+        "recentQuoteIds",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/daily_quotes/{quoteId}": {
+      "schema": {
+        "$ref": "#/entities/DailyQuote"
+      },
+      "description": "Daily featured quotes collection fetched by QuoteDiscoveryScreen."
+    },
+    "/users/{userId}/saved_quotes/{quoteId}": {
+      "schema": {
+        "$ref": "#/entities/Quote"
+      },
+      "description": "Per-user collection of saved Quote documents with text, author, tags, and TimestampInfo."
+    },
+    "/users/{userId}/preferences/{prefId}": {
+      "schema": {
+        "$ref": "#/entities/UserPreferences"
+      },
+      "description": "Per-user priority interest filters and recent quote usage log."
+    },
+    "/family_circles/{circleId}": {
+      "schema": {
+        "$ref": "#/entities/FamilyCircle"
+      },
+      "description": "Zero-trust Family Social Circles restricted to authorized Google UIDs and emails."
+    },
+    "/family_shared_quotes/{sharedQuoteId}": {
+      "schema": {
+        "$ref": "#/entities/FamilySharedQuote"
+      },
+      "description": "Zero-trust quotes shared within a Family Social Circle."
+    }
+  }
+}

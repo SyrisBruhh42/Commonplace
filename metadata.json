@@ -1,0 +1,6 @@
+{
+  "name": "Commonplace",
+  "description": "Literary quote discovery, archival location/time stamping, and Gemini AI philosophical exploration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

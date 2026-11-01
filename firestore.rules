@@ -1,0 +1,290 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 1: Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Global Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Validation Blueprint: TimestampInfo
+    function isValidTimestampInfo(ts) {
+      return ts is map &&
+             ts.keys().hasAll(['location', 'date', 'time', 'capturedAt']) &&
+             ts.keys().hasOnly(['location', 'date', 'time', 'capturedAt']) &&
+             ts.location is string && ts.location.size() >= 1 && ts.location.size() <= 300 &&
+             ts.date is string && ts.date.size() >= 1 && ts.date.size() <= 100 &&
+             ts.time is string && ts.time.size() >= 1 && ts.time.size() <= 100 &&
+             ts.capturedAt is string && ts.capturedAt.size() >= 1 && ts.capturedAt.size() <= 200;
+    }
+
+    // Validation Blueprint: Quote
+    function isValidQuote(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.text is string && data.text.size() >= 1 && data.text.size() <= 2000 &&
+             data.author is string && data.author.size() >= 1 && data.author.size() <= 200 &&
+             data.tags is list && data.tags.size() <= 15 &&
+             (data.tags.size() == 0 || (data.tags[0] is string && data.tags[0].size() <= 60)) &&
+             isValidTimestampInfo(data.timestampInfo) &&
+             data.sourceWork is string && data.sourceWork.size() <= 300 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 100 &&
+             data.onlinePopularityScore is int && data.onlinePopularityScore >= 0 && data.onlinePopularityScore <= 100 &&
+             data.personalNote is string && data.personalNote.size() <= 1000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // Validation Blueprint: DailyQuote
+    function isValidDailyQuote(data) {
+      return data.text is string && data.text.size() >= 1 && data.text.size() <= 2000 &&
+             data.author is string && data.author.size() >= 1 && data.author.size() <= 200 &&
+             data.sourceWork is string && data.sourceWork.size() <= 300 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 100 &&
+             data.tags is list && data.tags.size() <= 15 &&
+             (data.tags.size() == 0 || (data.tags[0] is string && data.tags[0].size() <= 60)) &&
+             data.onlinePopularityScore is int && data.onlinePopularityScore >= 0 && data.onlinePopularityScore <= 100 &&
+             data.popularOnlineContext is string && data.popularOnlineContext.size() <= 500 &&
+             data.era is string && data.era.size() <= 100 &&
+             data.dayKey is string && data.dayKey.size() >= 1 && data.dayKey.size() <= 64 &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // Validation Blueprint: FamilyCircle (Zero-Trust Google Social Circle)
+    function isCircleMember(circleData) {
+      return isSignedIn() && (
+        request.auth.uid in circleData.memberUids ||
+        (request.auth.token.email != null && request.auth.token.email in circleData.memberEmails)
+      );
+    }
+
+    function isValidFamilyCircle(data) {
+      return data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+             data.inviteCode is string && data.inviteCode.size() >= 1 && data.inviteCode.size() <= 32 &&
+             data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 &&
+             data.ownerEmail is string && data.ownerEmail.size() >= 1 && data.ownerEmail.size() <= 200 &&
+             data.memberUids is list && data.memberUids.size() >= 1 && data.memberUids.size() <= 20 &&
+             data.memberUids[0] is string && data.memberUids[0].size() <= 128 &&
+             data.memberEmails is list && data.memberEmails.size() >= 1 && data.memberEmails.size() <= 20 &&
+             data.memberEmails[0] is string && data.memberEmails[0].size() <= 200 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // Validation Blueprint: FamilySharedQuote (Zero-Trust Shared Quote)
+    function canAccessFamilySharedQuote(data) {
+      return isSignedIn() && (
+        request.auth.uid in data.allowedMemberUids ||
+        (request.auth.token.email != null && request.auth.token.email in data.allowedEmails)
+      );
+    }
+
+    function isValidFamilySharedQuote(data) {
+      return data.circleId is string && data.circleId.size() >= 1 && data.circleId.size() <= 128 &&
+             data.circleName is string && data.circleName.size() >= 1 && data.circleName.size() <= 100 &&
+             data.senderUid is string && data.senderUid == request.auth.uid &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 150 &&
+             data.senderEmail is string && data.senderEmail.size() >= 1 && data.senderEmail.size() <= 200 &&
+             data.allowedMemberUids is list && data.allowedMemberUids.size() >= 1 && data.allowedMemberUids.size() <= 20 &&
+             data.allowedMemberUids[0] is string && data.allowedMemberUids[0].size() <= 128 &&
+             data.allowedEmails is list && data.allowedEmails.size() >= 1 && data.allowedEmails.size() <= 20 &&
+             data.allowedEmails[0] is string && data.allowedEmails[0].size() <= 200 &&
+             data.text is string && data.text.size() >= 1 && data.text.size() <= 2000 &&
+             data.author is string && data.author.size() >= 1 && data.author.size() <= 200 &&
+             data.tags is list && data.tags.size() <= 15 &&
+             (data.tags.size() == 0 || (data.tags[0] is string && data.tags[0].size() <= 60)) &&
+             isValidTimestampInfo(data.timestampInfo) &&
+             data.personalNote is string && data.personalNote.size() <= 1000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // Validation Blueprint: UserPreferences
+    function isValidUserPreferences(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.selectedInterests is list && data.selectedInterests.size() <= 15 &&
+             (data.selectedInterests.size() == 0 || (data.selectedInterests[0] is string && data.selectedInterests[0].size() <= 60)) &&
+             data.priorityMode is string && data.priorityMode in ['Balanced', 'Personal Interests', 'Popular Online', 'Recent & Trending'] &&
+             data.recentQuoteIds is list && data.recentQuoteIds.size() <= 30 &&
+             (data.recentQuoteIds.size() == 0 || (data.recentQuoteIds[0] is string && data.recentQuoteIds[0].size() <= 128)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // Collection 0: /daily_quotes/{quoteId}
+    match /daily_quotes/{quoteId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn() &&
+                               isValidId(quoteId) &&
+                               incoming().keys().hasAll([
+                                 'text', 'author', 'sourceWork', 'category', 'tags',
+                                 'onlinePopularityScore', 'popularOnlineContext', 'era',
+                                 'dayKey', 'updatedAt'
+                               ]) &&
+                               incoming().keys().hasOnly([
+                                 'text', 'author', 'sourceWork', 'category', 'tags',
+                                 'onlinePopularityScore', 'popularOnlineContext', 'era',
+                                 'dayKey', 'updatedAt'
+                               ]) &&
+                               isValidDailyQuote(incoming());
+      allow delete: if false;
+    }
+
+    // Collection 1: /users/{userId}/saved_quotes/{quoteId}
+    match /users/{userId}/saved_quotes/{quoteId} {
+      allow get: if isOwner(userId) && isValidId(userId) && isValidId(quoteId) && (resource == null || existing().userId == request.auth.uid);
+      allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(quoteId) &&
+                       incoming().keys().hasAll([
+                         'userId', 'text', 'author', 'tags', 'timestampInfo',
+                         'sourceWork', 'category', 'onlinePopularityScore',
+                         'personalNote', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'text', 'author', 'tags', 'timestampInfo',
+                         'sourceWork', 'category', 'onlinePopularityScore',
+                         'personalNote', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidQuote(incoming());
+
+      allow update: if isValidQuote(incoming()) &&
+                       isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(quoteId) &&
+                       existing().userId == request.auth.uid &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'personalNote', 'timestampInfo', 'tags', 'category', 'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) && isValidId(userId) && isValidId(quoteId) && existing().userId == request.auth.uid;
+    }
+
+    // Collection 2: /users/{userId}/preferences/{prefId}
+    match /users/{userId}/preferences/{prefId} {
+      allow get: if isOwner(userId) && isValidId(userId) && isValidId(prefId) && (resource == null || existing().userId == request.auth.uid);
+      allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(prefId) &&
+                       incoming().keys().hasAll([
+                         'userId', 'selectedInterests', 'priorityMode', 'recentQuoteIds', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'selectedInterests', 'priorityMode', 'recentQuoteIds', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidUserPreferences(incoming());
+
+      allow update: if isValidUserPreferences(incoming()) &&
+                       isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidId(prefId) &&
+                       existing().userId == request.auth.uid &&
+                       incoming().userId == existing().userId &&
+                       (
+                         (incoming().createdAt == existing().createdAt &&
+                          incoming().diff(existing()).affectedKeys().hasOnly([
+                            'selectedInterests', 'priorityMode', 'recentQuoteIds', 'updatedAt'
+                          ])) ||
+                         (incoming().keys().hasAll([
+                            'userId', 'selectedInterests', 'priorityMode', 'recentQuoteIds', 'createdAt', 'updatedAt'
+                          ]) &&
+                          incoming().keys().hasOnly([
+                            'userId', 'selectedInterests', 'priorityMode', 'recentQuoteIds', 'createdAt', 'updatedAt'
+                          ]))
+                       );
+
+      allow delete: if isOwner(userId) && isValidId(userId) && isValidId(prefId) && existing().userId == request.auth.uid;
+    }
+
+    // Collection 3: /family_circles/{circleId} (Zero-Trust Family Social Circle)
+    match /family_circles/{circleId} {
+      allow get: if isValidId(circleId) && (resource == null || isCircleMember(existing()));
+      allow list: if isCircleMember(existing());
+
+      allow create: if isSignedIn() &&
+                       isValidId(circleId) &&
+                       incoming().ownerUid == request.auth.uid &&
+                       request.auth.uid in incoming().memberUids &&
+                       incoming().keys().hasAll([
+                         'name', 'inviteCode', 'ownerUid', 'ownerEmail',
+                         'memberUids', 'memberEmails', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'name', 'inviteCode', 'ownerUid', 'ownerEmail',
+                         'memberUids', 'memberEmails', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidFamilyCircle(incoming());
+
+      allow update: if isValidFamilyCircle(incoming()) &&
+                       isValidId(circleId) &&
+                       isCircleMember(existing()) &&
+                       incoming().ownerUid == existing().ownerUid &&
+                       incoming().createdAt == existing().createdAt &&
+                       existing().ownerUid in incoming().memberUids &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'name', 'memberUids', 'memberEmails', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(circleId) && existing().ownerUid == request.auth.uid;
+    }
+
+    // Collection 4: /family_shared_quotes/{sharedQuoteId} (Zero-Trust Family Shared Quotes)
+    match /family_shared_quotes/{sharedQuoteId} {
+      allow get: if isValidId(sharedQuoteId) && (resource == null || canAccessFamilySharedQuote(existing()));
+      allow list: if canAccessFamilySharedQuote(existing());
+
+      allow create: if isSignedIn() &&
+                       isValidId(sharedQuoteId) &&
+                       incoming().senderUid == request.auth.uid &&
+                       request.auth.uid in incoming().allowedMemberUids &&
+                       incoming().keys().hasAll([
+                         'circleId', 'circleName', 'senderUid', 'senderName', 'senderEmail',
+                         'allowedMemberUids', 'allowedEmails', 'text', 'author', 'tags',
+                         'timestampInfo', 'personalNote', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'circleId', 'circleName', 'senderUid', 'senderName', 'senderEmail',
+                         'allowedMemberUids', 'allowedEmails', 'text', 'author', 'tags',
+                         'timestampInfo', 'personalNote', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidFamilySharedQuote(incoming());
+
+      allow update: if isValidFamilySharedQuote(incoming()) &&
+                       isSignedIn() &&
+                       isValidId(sharedQuoteId) &&
+                       existing().senderUid == request.auth.uid &&
+                       incoming().senderUid == existing().senderUid &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'personalNote', 'allowedMemberUids', 'allowedEmails', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(sharedQuoteId) && existing().senderUid == request.auth.uid;
+    }
+  }
+}

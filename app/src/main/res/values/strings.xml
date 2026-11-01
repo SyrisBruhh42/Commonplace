@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">Commonplace</string>
+    <string name="sign_in_with_google">Sign in with Google</string>
+    <string name="tab_discover">Discover</string>
+    <string name="tab_library">Library</string>
+    <string name="tab_visual_muse">Visual Muse</string>
+    <string name="tab_symposium">Symposium</string>
+    <string name="btn_next_priority_quote">Next Priority</string>
+    <string name="btn_ai_discover_quote">AI Discover</string>
+    <string name="btn_save_with_stamp">Save &amp; Stamp</string>
+    <string name="btn_share_quote">Share</string>
+    <string name="btn_deep_dossier">Deep Dossier</string>
+    <string name="btn_quick_spark">Instant Spark (Flash-Lite)</string>
+    <string name="search_library_placeholder">Search quotes, authors, categories, or locations…</string>
+    <string name="sign_out_label">Sign out</string>
+</resources>
