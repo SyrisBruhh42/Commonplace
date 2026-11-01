@@ -261,3 +261,70 @@ test("Zero-Trust Family Social Circle: members can read and share; outsiders are
   // Outsider (Mallory) is strictly denied access to the shared quote
   await assertFails(outsiderDb.collection("family_shared_quotes").doc("fsq_1").get());
 });
+
+test("Tier-B Cloud Salon Relay: authenticated readers can create/join symposium_rooms and post marginalia; unauthenticated denied", async () => {
+  const unauthDb = testEnv.unauthenticatedContext().firestore();
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const bobDb = testEnv.authenticatedContext(BOB_UID).firestore();
+
+  const roomCode = "LFS-7K9M2P";
+  const now = new Date();
+  const validRoom = {
+    roomCode,
+    title: "Stoic Dawn Co-Reading Folio",
+    hostUid: ALICE_UID,
+    hostName: "Alice",
+    gameMode: "CO_READING_SALON",
+    lifecyclePolicy: "ON_DEMAND_WAKE",
+    currentQuoteId: "q_seneca_imagination",
+    currentQuoteText: "We suffer more often in imagination than in reality.",
+    currentQuoteAuthor: "Seneca the Younger",
+    participantUids: [ALICE_UID],
+    participantNames: ["Alice"],
+    activeScholars: ["@archivist", "@willow", "@mote"],
+    roundNumber: 1,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await assertFails(unauthDb.collection("symposium_rooms").doc(roomCode).set(validRoom));
+  await assertSucceeds(aliceDb.collection("symposium_rooms").doc(roomCode).set(validRoom));
+
+  // Bob can join the room by adding his UID to participantUids without mutating hostUid
+  await assertSucceeds(
+    bobDb.collection("symposium_rooms").doc(roomCode).update({
+      participantUids: [ALICE_UID, BOB_UID],
+      participantNames: ["Alice", "Bob"],
+      updatedAt: new Date(),
+    })
+  );
+
+  // Bob cannot hijack hostUid
+  await assertFails(
+    bobDb.collection("symposium_rooms").doc(roomCode).update({
+      hostUid: BOB_UID,
+      updatedAt: new Date(),
+    })
+  );
+
+  // Alice and Bob can post synchronized marginalia messages
+  const msgRef = aliceDb
+    .collection("symposium_rooms")
+    .doc(roomCode)
+    .collection("messages")
+    .doc("smsg_1");
+  await assertSucceeds(
+    msgRef.set({
+      roomCode,
+      senderUid: ALICE_UID,
+      senderName: "Alice",
+      messageType: "MARGINALIA",
+      text: "Notice how Seneca contrasts imagination with reality.",
+      quoteSnippet: "imagination than in reality",
+      scholarHandle: "@archivist",
+      triviaDeltaScore: 0,
+      createdAt: new Date(),
+    })
+  );
+});
+

@@ -22,7 +22,9 @@ data class ProvenanceStamp(
     val locationStamp: String,
     val dateStamp: String,
     val timeStamp: String,
-    val isGpsResolved: Boolean
+    val isGpsResolved: Boolean,
+    val latitude: Double = 37.7749,
+    val longitude: Double = -122.4194
 ) {
     fun toTimestampInfo(): TimestampInfo = TimestampInfo(
         location = locationStamp,
@@ -105,7 +107,9 @@ class LocationStampService(
                         locationStamp = placeLabel,
                         dateStamp = dateStr,
                         timeStamp = timeStr,
-                        isGpsResolved = true
+                        isGpsResolved = true,
+                        latitude = location.latitude,
+                        longitude = location.longitude
                     )
                 } else {
                     ProvenanceStamp(

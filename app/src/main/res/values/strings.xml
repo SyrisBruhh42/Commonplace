@@ -13,4 +13,14 @@
     <string name="btn_quick_spark">Instant Spark (Flash-Lite)</string>
     <string name="search_library_placeholder">Search quotes, authors, categories, or locations…</string>
     <string name="sign_out_label">Sign out</string>
+    <string name="tab_world_map">World Map</string>
+    <string name="widget_daily_quote_description">Displays the Commonplace Daily Quote with its archival location and timestamp for instant access.</string>
+    <string name="widget_header_title">COMMONPLACE • DAILY ARCHIVAL FOLIO</string>
+    <string name="widget_action_refresh">Refresh</string>
+    <string name="widget_default_quote_text">“We suffer more often in imagination than in reality.”</string>
+    <string name="widget_default_quote_author">— Seneca the Younger (Moral Letters to Lucilius)</string>
+    <string name="widget_default_timestamp">Stamp: Archival Reading Desk • Today</string>
+    <string name="widget_open_folio_label">Open Folio →</string>
+    <string name="notification_channel_daily_quote_name">Quote of the Day</string>
+    <string name="notification_channel_daily_quote_desc">Daily scheduled literary quote notification with archival timestamp.</string>
 </resources>

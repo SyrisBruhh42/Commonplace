@@ -181,6 +181,37 @@ service cloud.firestore {
                        ]);
 
       allow delete: if isOwner(userId) && isValidId(userId) && isValidId(quoteId) && existing().userId == request.auth.uid;
+
+      // Subcollection: /users/{userId}/saved_quotes/{quoteId}/annotations/{annotationId}
+      match /annotations/{annotationId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(quoteId) && isValidId(annotationId) && (resource == null || existing().userId == request.auth.uid);
+        allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(quoteId) &&
+                         isValidId(annotationId) &&
+                         incoming().keys().hasAll([
+                           'quoteId', 'userId', 'highlightedText', 'startCharIndex',
+                           'endCharIndex', 'inkColor', 'noteText', 'timestampLabel', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'quoteId', 'userId', 'highlightedText', 'startCharIndex',
+                           'endCharIndex', 'inkColor', 'noteText', 'timestampLabel', 'createdAt'
+                         ]) &&
+                         incoming().userId is string && incoming().userId == request.auth.uid &&
+                         incoming().quoteId is string && incoming().quoteId == quoteId &&
+                         incoming().highlightedText is string && incoming().highlightedText.size() >= 1 && incoming().highlightedText.size() <= 1000 &&
+                         incoming().startCharIndex is int && incoming().startCharIndex >= 0 && incoming().startCharIndex <= 2000 &&
+                         incoming().endCharIndex is int && incoming().endCharIndex >= incoming().startCharIndex && incoming().endCharIndex <= 2000 &&
+                         incoming().inkColor is string && incoming().inkColor in ['AMBER_GOLD', 'SAGE_VERDIGRIS', 'OXBLOOD_CARMINE', 'COBALT_ULTRAMARINE'] &&
+                         incoming().noteText is string && incoming().noteText.size() >= 1 && incoming().noteText.size() <= 1000 &&
+                         incoming().timestampLabel is string && incoming().timestampLabel.size() >= 1 && incoming().timestampLabel.size() <= 120 &&
+                         incoming().createdAt is timestamp && incoming().createdAt <= request.time;
+
+        allow update: if false;
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(quoteId) && isValidId(annotationId) && existing().userId == request.auth.uid;
+      }
     }
 
     // Collection 2: /users/{userId}/preferences/{prefId}
@@ -285,6 +316,210 @@ service cloud.firestore {
                        ]);
 
       allow delete: if isSignedIn() && isValidId(sharedQuoteId) && existing().senderUid == request.auth.uid;
+    }
+
+    // Validation Blueprint: MultiplayerSalon (/symposium_rooms/{roomCode})
+    function isValidMultiplayerSalon(data) {
+      return data.roomCode is string && data.roomCode.size() >= 4 && data.roomCode.size() <= 32 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 140 &&
+             data.hostUid is string && data.hostUid.size() >= 1 && data.hostUid.size() <= 128 &&
+             data.hostName is string && data.hostName.size() >= 1 && data.hostName.size() <= 120 &&
+             data.gameMode is string && data.gameMode in ['LITERARY_TRIVIA_DUEL', 'CO_READING_SALON', 'SYMPOSIUM_ROUNDTABLE'] &&
+             data.lifecyclePolicy is string && data.lifecyclePolicy in ['ON_DEMAND_WAKE', 'AUTO_CLOSE_IDLE', 'KEEP_LIVE_PINNED', 'LEASE_TTL'] &&
+             data.currentQuoteId is string && data.currentQuoteId.size() >= 1 && data.currentQuoteId.size() <= 128 &&
+             data.currentQuoteText is string && data.currentQuoteText.size() >= 1 && data.currentQuoteText.size() <= 2000 &&
+             data.currentQuoteAuthor is string && data.currentQuoteAuthor.size() >= 1 && data.currentQuoteAuthor.size() <= 200 &&
+             data.participantUids is list && data.participantUids.size() >= 1 && data.participantUids.size() <= 32 &&
+             data.participantUids[0] is string && data.participantUids[0].size() <= 128 &&
+             data.participantNames is list && data.participantNames.size() >= 1 && data.participantNames.size() <= 32 &&
+             data.participantNames[0] is string && data.participantNames[0].size() <= 120 &&
+             data.activeScholars is list && data.activeScholars.size() <= 6 &&
+             (data.activeScholars.size() == 0 || (data.activeScholars[0] is string && data.activeScholars[0].size() <= 40)) &&
+             data.roundNumber is int && data.roundNumber >= 1 && data.roundNumber <= 100 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidSalonMessage(data) {
+      return data.roomCode is string && data.roomCode.size() >= 4 && data.roomCode.size() <= 32 &&
+             data.senderUid is string && data.senderUid == request.auth.uid &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 120 &&
+             data.messageType is string && data.messageType in ['MARGINALIA', 'TRIVIA', 'CHAT', 'SCHOLAR'] &&
+             data.text is string && data.text.size() >= 1 && data.text.size() <= 2000 &&
+             data.quoteSnippet is string && data.quoteSnippet.size() <= 400 &&
+             data.scholarHandle is string && data.scholarHandle.size() <= 40 &&
+             data.triviaDeltaScore is int && data.triviaDeltaScore >= -500 && data.triviaDeltaScore <= 500 &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    // Collection 5: /symposium_rooms/{roomCode} (Tier-B Cloud Salon Relay)
+    match /symposium_rooms/{roomCode} {
+      allow get, list: if isSignedIn();
+
+      allow create: if isSignedIn() &&
+                       isValidId(roomCode) &&
+                       incoming().roomCode == roomCode &&
+                       incoming().hostUid == request.auth.uid &&
+                       request.auth.uid in incoming().participantUids &&
+                       incoming().keys().hasAll([
+                         'roomCode', 'title', 'hostUid', 'hostName',
+                         'gameMode', 'lifecyclePolicy', 'currentQuoteId',
+                         'currentQuoteText', 'currentQuoteAuthor',
+                         'participantUids', 'participantNames', 'activeScholars',
+                         'roundNumber', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'roomCode', 'title', 'hostUid', 'hostName',
+                         'gameMode', 'lifecyclePolicy', 'currentQuoteId',
+                         'currentQuoteText', 'currentQuoteAuthor',
+                         'participantUids', 'participantNames', 'activeScholars',
+                         'roundNumber', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidMultiplayerSalon(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(roomCode) &&
+                       isValidMultiplayerSalon(incoming()) &&
+                       incoming().roomCode == existing().roomCode &&
+                       incoming().hostUid == existing().hostUid &&
+                       incoming().createdAt == existing().createdAt &&
+                       request.auth.uid in incoming().participantUids &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'title', 'gameMode', 'lifecyclePolicy',
+                         'currentQuoteId', 'currentQuoteText', 'currentQuoteAuthor',
+                         'participantUids', 'participantNames', 'activeScholars',
+                         'roundNumber', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(roomCode) && existing().hostUid == request.auth.uid;
+
+      // Subcollection: /symposium_rooms/{roomCode}/messages/{messageId}
+      match /messages/{messageId} {
+        allow get, list: if isSignedIn();
+
+        allow create: if isSignedIn() &&
+                         isValidId(roomCode) &&
+                         isValidId(messageId) &&
+                         incoming().roomCode == roomCode &&
+                         incoming().keys().hasAll([
+                           'roomCode', 'senderUid', 'senderName', 'messageType',
+                           'text', 'quoteSnippet', 'scholarHandle',
+                           'triviaDeltaScore', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'roomCode', 'senderUid', 'senderName', 'messageType',
+                           'text', 'quoteSnippet', 'scholarHandle',
+                           'triviaDeltaScore', 'createdAt'
+                         ]) &&
+                         isValidSalonMessage(incoming());
+
+        allow update: if false;
+        allow delete: if isSignedIn() && isValidId(roomCode) && isValidId(messageId) && existing().senderUid == request.auth.uid;
+      }
+    }
+
+    // Validation Blueprint: MapQuotePin (/map_quote_pins/{pinId})
+    function isValidMapQuotePin(data) {
+      return data.ownerUid is string && data.ownerUid == request.auth.uid &&
+             data.dayKey is string && data.dayKey.size() >= 8 && data.dayKey.size() <= 32 &&
+             data.quoteId is string && data.quoteId.size() >= 1 && data.quoteId.size() <= 128 &&
+             data.quoteText is string && data.quoteText.size() >= 1 && data.quoteText.size() <= 2000 &&
+             data.quoteAuthor is string && data.quoteAuthor.size() >= 1 && data.quoteAuthor.size() <= 200 &&
+             data.sourceWork is string && data.sourceWork.size() <= 300 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 100 &&
+             (data.latitude is int || data.latitude is float) && data.latitude >= -90.0 && data.latitude <= 90.0 &&
+             (data.longitude is int || data.longitude is float) && data.longitude >= -180.0 && data.longitude <= 180.0 &&
+             data.regionLabel is string && data.regionLabel.size() >= 1 && data.regionLabel.size() <= 200 &&
+             data.anonymousAlias is string && data.anonymousAlias.size() >= 1 && data.anonymousAlias.size() <= 100 &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    // Validation Blueprint: MapPinIdentity (/map_pin_identities/{pinId})
+    function canReadPinIdentity(data) {
+      return isSignedIn() && (
+        request.auth.uid == data.ownerUid ||
+        request.auth.uid in data.connectedUserUids ||
+        (request.auth.token.email != null && request.auth.token.email in data.connectedUserEmails)
+      );
+    }
+
+    function isValidMapPinIdentity(data) {
+      return data.pinId is string && data.pinId.size() >= 1 && data.pinId.size() <= 128 &&
+             data.ownerUid is string && data.ownerUid == request.auth.uid &&
+             data.ownerDisplayName is string && data.ownerDisplayName.size() >= 1 && data.ownerDisplayName.size() <= 150 &&
+             data.ownerEmail is string && data.ownerEmail.size() >= 1 && data.ownerEmail.size() <= 200 &&
+             data.circleNames is list && data.circleNames.size() <= 20 &&
+             (data.circleNames.size() == 0 || (data.circleNames[0] is string && data.circleNames[0].size() <= 100)) &&
+             data.personalMarginalia is string && data.personalMarginalia.size() <= 1000 &&
+             data.exactLocationLabel is string && data.exactLocationLabel.size() >= 1 && data.exactLocationLabel.size() <= 300 &&
+             data.connectedUserUids is list && data.connectedUserUids.size() >= 1 && data.connectedUserUids.size() <= 50 &&
+             data.connectedUserUids[0] is string && data.connectedUserUids[0].size() <= 128 &&
+             data.connectedUserEmails is list && data.connectedUserEmails.size() >= 1 && data.connectedUserEmails.size() <= 50 &&
+             data.connectedUserEmails[0] is string && data.connectedUserEmails[0].size() <= 200 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // Collection 6: /map_quote_pins/{pinId} (Public Zero-Trust Daily Quote Pins - Once-a-day per user, no PII)
+    match /map_quote_pins/{pinId} {
+      allow get, list: if isSignedIn();
+
+      allow create: if isSignedIn() &&
+                       isValidId(pinId) &&
+                       pinId == request.auth.uid + '_' + incoming().dayKey &&
+                       incoming().ownerUid == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'ownerUid', 'dayKey', 'quoteId', 'quoteText', 'quoteAuthor',
+                         'sourceWork', 'category', 'latitude', 'longitude',
+                         'regionLabel', 'anonymousAlias', 'createdAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'ownerUid', 'dayKey', 'quoteId', 'quoteText', 'quoteAuthor',
+                         'sourceWork', 'category', 'latitude', 'longitude',
+                         'regionLabel', 'anonymousAlias', 'createdAt'
+                       ]) &&
+                       isValidMapQuotePin(incoming());
+
+      allow update: if false;
+      allow delete: if isSignedIn() && isValidId(pinId) && existing().ownerUid == request.auth.uid;
+    }
+
+    // Collection 7: /map_pin_identities/{pinId} (Zero-Trust Identity & Marginalia - Friends/Connected Circles ONLY)
+    match /map_pin_identities/{pinId} {
+      allow get: if isValidId(pinId) && (resource == null || canReadPinIdentity(existing()));
+      allow list: if canReadPinIdentity(existing());
+
+      allow create: if isSignedIn() &&
+                       isValidId(pinId) &&
+                       incoming().pinId == pinId &&
+                       incoming().ownerUid == request.auth.uid &&
+                       request.auth.uid in incoming().connectedUserUids &&
+                       incoming().keys().hasAll([
+                         'pinId', 'ownerUid', 'ownerDisplayName', 'ownerEmail',
+                         'circleNames', 'personalMarginalia', 'exactLocationLabel',
+                         'connectedUserUids', 'connectedUserEmails', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'pinId', 'ownerUid', 'ownerDisplayName', 'ownerEmail',
+                         'circleNames', 'personalMarginalia', 'exactLocationLabel',
+                         'connectedUserUids', 'connectedUserEmails', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidMapPinIdentity(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(pinId) &&
+                       isValidMapPinIdentity(incoming()) &&
+                       existing().ownerUid == request.auth.uid &&
+                       incoming().ownerUid == existing().ownerUid &&
+                       incoming().pinId == existing().pinId &&
+                       incoming().createdAt == existing().createdAt &&
+                       request.auth.uid in incoming().connectedUserUids &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'connectedUserUids', 'connectedUserEmails', 'circleNames',
+                         'personalMarginalia', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(pinId) && existing().ownerUid == request.auth.uid;
     }
   }
 }

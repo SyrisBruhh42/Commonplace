@@ -333,6 +333,338 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "MultiplayerSalon": {
+      "title": "MultiplayerSalon",
+      "description": "Cloud Salon Relay room document for Co-Reading Marginalia, Literary Trivia Duel, and Symposium Roundtable.",
+      "type": "object",
+      "properties": {
+        "roomCode": {
+          "type": "string",
+          "description": "Canonical 6-char Crockford Base32 room code (LFS-XXXXXX)."
+        },
+        "title": {
+          "type": "string",
+          "description": "Display title of the Literary Salon."
+        },
+        "hostUid": {
+          "type": "string",
+          "description": "Google UID of the room creator."
+        },
+        "hostName": {
+          "type": "string",
+          "description": "Display name of the room creator."
+        },
+        "gameMode": {
+          "type": "string",
+          "description": "Active multiplayer game mode (CO_READING_SALON, LITERARY_TRIVIA_DUEL, SYMPOSIUM_ROUNDTABLE)."
+        },
+        "lifecyclePolicy": {
+          "type": "string",
+          "description": "Room lifecycle policy (ON_DEMAND_WAKE, AUTO_CLOSE_IDLE, KEEP_LIVE_PINNED, LEASE_TTL)."
+        },
+        "currentQuoteId": {
+          "type": "string",
+          "description": "Active passage quote ID."
+        },
+        "currentQuoteText": {
+          "type": "string",
+          "description": "Active passage quote text."
+        },
+        "currentQuoteAuthor": {
+          "type": "string",
+          "description": "Active passage quote author."
+        },
+        "participantUids": {
+          "type": "array",
+          "description": "Authenticated participant Google UIDs."
+        },
+        "participantNames": {
+          "type": "array",
+          "description": "Participant display names."
+        },
+        "activeScholars": {
+          "type": "array",
+          "description": "Active resident AI scholar handles (@archivist, @willow, @mote)."
+        },
+        "roundNumber": {
+          "type": "integer",
+          "description": "Current Literary Trivia Duel round number."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when updated."
+        }
+      },
+      "required": [
+        "roomCode",
+        "title",
+        "hostUid",
+        "hostName",
+        "gameMode",
+        "lifecyclePolicy",
+        "currentQuoteId",
+        "currentQuoteText",
+        "currentQuoteAuthor",
+        "participantUids",
+        "participantNames",
+        "activeScholars",
+        "roundNumber",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SalonMessage": {
+      "title": "SalonMessage",
+      "description": "Synchronized marginalia entry, trivia answer event, or roundtable message inside a symposium room.",
+      "type": "object",
+      "properties": {
+        "roomCode": {
+          "type": "string",
+          "description": "Canonical room code (LFS-XXXXXX)."
+        },
+        "senderUid": {
+          "type": "string",
+          "description": "Authenticated sender UID."
+        },
+        "senderName": {
+          "type": "string",
+          "description": "Display name of the sender."
+        },
+        "messageType": {
+          "type": "string",
+          "description": "Event type (MARGINALIA, TRIVIA, CHAT, SCHOLAR)."
+        },
+        "text": {
+          "type": "string",
+          "description": "Message or marginalia text."
+        },
+        "quoteSnippet": {
+          "type": "string",
+          "description": "Highlighted passage snippet."
+        },
+        "scholarHandle": {
+          "type": "string",
+          "description": "Optional resident AI scholar handle."
+        },
+        "triviaDeltaScore": {
+          "type": "integer",
+          "description": "Score delta earned in Trivia Duel."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when posted."
+        }
+      },
+      "required": [
+        "roomCode",
+        "senderUid",
+        "senderName",
+        "messageType",
+        "text",
+        "quoteSnippet",
+        "scholarHandle",
+        "triviaDeltaScore",
+        "createdAt"
+      ]
+    },
+    "QuoteHighlightAnnotation": {
+      "title": "QuoteHighlightAnnotation",
+      "description": "Personal time-stamped passage highlight and annotation within a saved quote.",
+      "type": "object",
+      "properties": {
+        "quoteId": {
+          "type": "string",
+          "description": "ID of the parent saved quote."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Authenticated owner UID."
+        },
+        "highlightedText": {
+          "type": "string",
+          "description": "Selected passage substring within the quote."
+        },
+        "startCharIndex": {
+          "type": "integer",
+          "description": "Inclusive start character index within quote text."
+        },
+        "endCharIndex": {
+          "type": "integer",
+          "description": "Exclusive end character index within quote text."
+        },
+        "inkColor": {
+          "type": "string",
+          "description": "Archival ink color enum (AMBER_GOLD, SAGE_VERDIGRIS, OXBLOOD_CARMINE, COBALT_ULTRAMARINE)."
+        },
+        "noteText": {
+          "type": "string",
+          "description": "Personal marginalia note attached to the highlight."
+        },
+        "timestampLabel": {
+          "type": "string",
+          "description": "Human-readable date and time stamp when annotation was recorded."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created."
+        }
+      },
+      "required": [
+        "quoteId",
+        "userId",
+        "highlightedText",
+        "startCharIndex",
+        "endCharIndex",
+        "inkColor",
+        "noteText",
+        "timestampLabel",
+        "createdAt"
+      ]
+    },
+    "MapQuotePin": {
+      "title": "MapQuotePin",
+      "description": "Public zero-trust daily quote pin on the shared visual map. Contains NO user PII; document ID is {ownerUid}_{dayKey} to enforce once-per-day pinning.",
+      "type": "object",
+      "properties": {
+        "ownerUid": {
+          "type": "string",
+          "description": "Authenticated user UID who created the pin (used for rule verification and connected identity lookup)."
+        },
+        "dayKey": {
+          "type": "string",
+          "description": "UTC/Local calendar day key (yyyy_MM_dd) enforcing one pin per user per day."
+        },
+        "quoteId": {
+          "type": "string",
+          "description": "Identifier of the pinned quote."
+        },
+        "quoteText": {
+          "type": "string",
+          "description": "Text of the pinned quote."
+        },
+        "quoteAuthor": {
+          "type": "string",
+          "description": "Author of the pinned quote."
+        },
+        "sourceWork": {
+          "type": "string",
+          "description": "Source work of the pinned quote."
+        },
+        "category": {
+          "type": "string",
+          "description": "Thematic category of the pinned quote."
+        },
+        "latitude": {
+          "type": "number",
+          "description": "Coarse latitude coordinate (-90.0 to 90.0) rounded for zero-trust privacy."
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Coarse longitude coordinate (-180.0 to 180.0) rounded for zero-trust privacy."
+        },
+        "regionLabel": {
+          "type": "string",
+          "description": "Coarse city or region name displayed publicly on the map."
+        },
+        "anonymousAlias": {
+          "type": "string",
+          "description": "Non-identifying literary cipher shown to unconnected users."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when pinned (clients must submit FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "ownerUid",
+        "dayKey",
+        "quoteId",
+        "quoteText",
+        "quoteAuthor",
+        "sourceWork",
+        "category",
+        "latitude",
+        "longitude",
+        "regionLabel",
+        "anonymousAlias",
+        "createdAt"
+      ]
+    },
+    "MapPinIdentity": {
+      "title": "MapPinIdentity",
+      "description": "Zero-trust private identity & marginalia document for a map quote pin, readable ONLY by the pin owner or connected/friended users.",
+      "type": "object",
+      "properties": {
+        "pinId": {
+          "type": "string",
+          "description": "Matching document ID from /map_quote_pins/{pinId}."
+        },
+        "ownerUid": {
+          "type": "string",
+          "description": "Google UID of the pin creator."
+        },
+        "ownerDisplayName": {
+          "type": "string",
+          "description": "Display name revealed only to connected/friended users."
+        },
+        "ownerEmail": {
+          "type": "string",
+          "description": "Google email revealed only to connected/friended users."
+        },
+        "circleNames": {
+          "type": "array",
+          "description": "Names of shared social circles or friend connections."
+        },
+        "personalMarginalia": {
+          "type": "string",
+          "description": "Personal reflection note visible only to connected friends."
+        },
+        "exactLocationLabel": {
+          "type": "string",
+          "description": "Detailed provenance location stamp visible only to connected friends."
+        },
+        "connectedUserUids": {
+          "type": "array",
+          "description": "Explicit ACL of connected friend Google UIDs allowed to read this identity document."
+        },
+        "connectedUserEmails": {
+          "type": "array",
+          "description": "Explicit ACL of connected friend Google emails allowed to read this identity document."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when updated."
+        }
+      },
+      "required": [
+        "pinId",
+        "ownerUid",
+        "ownerDisplayName",
+        "ownerEmail",
+        "circleNames",
+        "personalMarginalia",
+        "exactLocationLabel",
+        "connectedUserUids",
+        "connectedUserEmails",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -347,6 +679,12 @@
         "$ref": "#/entities/Quote"
       },
       "description": "Per-user collection of saved Quote documents with text, author, tags, and TimestampInfo."
+    },
+    "/users/{userId}/saved_quotes/{quoteId}/annotations/{annotationId}": {
+      "schema": {
+        "$ref": "#/entities/QuoteHighlightAnnotation"
+      },
+      "description": "Per-quote time-stamped passage highlights and personal marginalia annotations."
     },
     "/users/{userId}/preferences/{prefId}": {
       "schema": {
@@ -365,6 +703,30 @@
         "$ref": "#/entities/FamilySharedQuote"
       },
       "description": "Zero-trust quotes shared within a Family Social Circle."
+    },
+    "/symposium_rooms/{roomCode}": {
+      "schema": {
+        "$ref": "#/entities/MultiplayerSalon"
+      },
+      "description": "Tier-B Cloud Salon Relay rooms keyed by 6-char Crockford Base32 room code."
+    },
+    "/symposium_rooms/{roomCode}/messages/{messageId}": {
+      "schema": {
+        "$ref": "#/entities/SalonMessage"
+      },
+      "description": "Real-time marginalia, trivia events, and roundtable messages for a symposium room."
+    },
+    "/map_quote_pins/{pinId}": {
+      "schema": {
+        "$ref": "#/entities/MapQuotePin"
+      },
+      "description": "Public zero-trust daily quote pins on the shared visual map (no user PII; once-per-day per user)."
+    },
+    "/map_pin_identities/{pinId}": {
+      "schema": {
+        "$ref": "#/entities/MapPinIdentity"
+      },
+      "description": "Zero-trust identity & marginalia documents for map pins, readable only by connected/friended users."
     }
   }
 }

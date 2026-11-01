@@ -68,27 +68,67 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.filled.BorderColor
+import androidx.compose.material.icons.filled.PictureAsPdf
 import com.example.R
+import com.example.data.HighlightInkColor
+import com.example.data.JournalPdfExportResult
+import com.example.data.PdfFolioTheme
 import com.example.data.PriorityScoredQuote
+import com.example.data.QuoteAudioSceneState
 import com.example.data.QuoteCategories
+import com.example.data.QuoteHighlightAnnotation
 import com.example.data.QuoteItem
 import com.example.data.SavedQuoteDocument
+import com.example.data.VoiceTranscriptionState
+import com.example.data.VoiceTranscriptionTarget
+import com.example.util.JournalPagePdfExporter
 
 @Composable
 fun LibraryScreen(
     savedQuotesState: UiState<List<SavedQuoteDocument>>,
     rankedCatalogQuotes: List<PriorityScoredQuote>,
+    audioState: QuoteAudioSceneState = QuoteAudioSceneState(),
+    transcriptionState: VoiceTranscriptionState = VoiceTranscriptionState(),
+    quoteAnnotationsByQuoteId: Map<String, List<QuoteHighlightAnnotation>> = emptyMap(),
+    pdfExportStatusMessage: String? = null,
     onSaveCatalogQuote: (QuoteItem) -> Unit,
     onUpdateNote: (String, String) -> Unit,
     onDeleteSavedQuote: (String) -> Unit,
     onOpenDossier: (QuoteItem) -> Unit,
-    onDiscussInChat: (QuoteItem) -> Unit
+    onDiscussInChat: (QuoteItem) -> Unit,
+    onReadAloud: (QuoteItem) -> Unit = {},
+    onGenerate30sMusicScene: (QuoteItem) -> Unit = {},
+    onStopAudio: () -> Unit = {},
+    onToggleVoiceDictation: (VoiceTranscriptionTarget, (String) -> Unit) -> Unit = { _, _ -> },
+    onAddHighlightAnnotation: (
+        quoteId: String,
+        highlightedText: String,
+        startCharIndex: Int,
+        endCharIndex: Int,
+        inkColor: HighlightInkColor,
+        noteText: String
+    ) -> Unit = { _, _, _, _, _, _ -> },
+    onDeleteHighlightAnnotation: (String, String) -> Unit = { _, _ -> },
+    onExportJournalPdf: (SavedQuoteDocument, PdfFolioTheme) -> JournalPdfExportResult = { doc, theme ->
+        JournalPagePdfExporter.exportJournalPagePdf(
+            context = null,
+            quote = doc,
+            annotations = emptyList(),
+            folioTheme = theme,
+            audioState = audioState
+        )
+    },
+    onPdfSavedToUserUri: (String, Long) -> Unit = { _, _ -> },
+    onDismissPdfStatusBanner: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var selectedSegment by remember { mutableIntStateOf(0) } // 0 = Stamped Archive, 1 = Master Catalog
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("All") }
     var editingQuote by remember { mutableStateOf<SavedQuoteDocument?>(null) }
+    var highlightingQuote by remember { mutableStateOf<SavedQuoteDocument?>(null) }
+    var exportingPdfQuote by remember { mutableStateOf<SavedQuoteDocument?>(null) }
 
     val categoriesWithAll = remember { listOf("All") + QuoteCategories.ALL }
 
@@ -138,33 +178,59 @@ fun LibraryScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Search Function
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = { Text(stringResource(R.string.search_library_placeholder)) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Search quotes"
-                    )
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(
-                                imageVector = Icons.Default.Clear,
-                                contentDescription = "Clear search"
-                            )
+            // Search Function + Microphone Voice Dictation (gemini-3.5-transcribe)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text(stringResource(R.string.search_library_placeholder)) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search quotes"
+                        )
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(
+                                    imageVector = Icons.Default.Clear,
+                                    contentDescription = "Clear search"
+                                )
+                            }
                         }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("library_search_input")
+                )
+
+                VoiceDictationMicButton(
+                    target = VoiceTranscriptionTarget.LIBRARY_SEARCH,
+                    transcriptionState = transcriptionState,
+                    onToggleVoiceDictation = onToggleVoiceDictation,
+                    onTranscribedText = { transcript ->
+                        searchQuery = transcript
                     }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("library_search_input")
-            )
+                )
+            }
+
+            if (transcriptionState.activeTarget == VoiceTranscriptionTarget.LIBRARY_SEARCH &&
+                transcriptionState.statusMessage != null
+            ) {
+                Text(
+                    text = transcriptionState.statusMessage,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
 
             Spacer(modifier = Modifier.height(10.dp))
 
@@ -191,6 +257,53 @@ fun LibraryScreen(
             }
 
             Spacer(modifier = Modifier.height(10.dp))
+
+            pdfExportStatusMessage?.let { statusMsg ->
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp)
+                        .testTag("library_pdf_export_banner")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PictureAsPdf,
+                                contentDescription = "PDF exported",
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = statusMsg,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                        IconButton(
+                            onClick = onDismissPdfStatusBanner,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Clear,
+                                contentDescription = "Dismiss export status",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
 
             if (selectedSegment == 0) {
                 // Stamped Favorites Archive View
@@ -220,9 +333,15 @@ fun LibraryScreen(
                         }
                     }
                     is UiState.Success -> {
-                        val filteredSaved by remember(savedQuotesState.data, searchQuery, selectedCategory) {
+                        val filteredSaved by remember(
+                            savedQuotesState.data,
+                            searchQuery,
+                            selectedCategory,
+                            quoteAnnotationsByQuoteId
+                        ) {
                             derivedStateOf {
                                 savedQuotesState.data.filter { doc ->
+                                    val annotations = quoteAnnotationsByQuoteId[doc.id].orEmpty()
                                     val matchesCategory = selectedCategory == "All" ||
                                         doc.category.equals(selectedCategory, ignoreCase = true) ||
                                         doc.tags.any { it.equals(selectedCategory, ignoreCase = true) }
@@ -235,7 +354,11 @@ fun LibraryScreen(
                                         doc.tags.any { it.lowercase().contains(q) } ||
                                         doc.timestampInfo.location.lowercase().contains(q) ||
                                         doc.timestampInfo.capturedAt.lowercase().contains(q) ||
-                                        doc.personalNote.lowercase().contains(q)
+                                        doc.personalNote.lowercase().contains(q) ||
+                                        annotations.any {
+                                            it.highlightedText.lowercase().contains(q) ||
+                                                it.noteText.lowercase().contains(q)
+                                        }
                                     matchesCategory && matchesSearch
                                 }
                             }
@@ -253,9 +376,17 @@ fun LibraryScreen(
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 items(filteredSaved, key = { it.id }) { doc ->
+                                    val docAnnotations = quoteAnnotationsByQuoteId[doc.id].orEmpty()
                                     SavedQuoteArchiveCard(
                                         doc = doc,
+                                        annotations = docAnnotations,
+                                        audioState = audioState,
                                         onEditNote = { editingQuote = doc },
+                                        onHighlightAndAnnotate = { highlightingQuote = doc },
+                                        onExportJournalPdf = { exportingPdfQuote = doc },
+                                        onDeleteHighlightAnnotation = { annotationId ->
+                                            onDeleteHighlightAnnotation(doc.id, annotationId)
+                                        },
                                         onShare = {
                                             val stampStr = "${doc.locationStamp} • ${doc.dateStamp} at ${doc.timeStamp}"
                                             shareQuoteViaIntent(
@@ -272,7 +403,10 @@ fun LibraryScreen(
                                         onDiscuss = {
                                             onDiscussInChat(doc.toDomainQuoteItem())
                                         },
-                                        onDelete = { onDeleteSavedQuote(doc.id) }
+                                        onDelete = { onDeleteSavedQuote(doc.id) },
+                                        onReadAloud = onReadAloud,
+                                        onGenerate30sMusicScene = onGenerate30sMusicScene,
+                                        onStopAudio = onStopAudio
                                     )
                                 }
                             }
@@ -307,6 +441,7 @@ fun LibraryScreen(
                     items(filteredCatalog, key = { it.quote.id }) { scored ->
                         CatalogQuoteLibraryCard(
                             scoredQuote = scored,
+                            audioState = audioState,
                             onSaveWithStamp = { onSaveCatalogQuote(scored.quote) },
                             onShare = {
                                 shareQuoteViaIntent(
@@ -317,7 +452,10 @@ fun LibraryScreen(
                                 )
                             },
                             onOpenDossier = { onOpenDossier(scored.quote) },
-                            onDiscuss = { onDiscussInChat(scored.quote) }
+                            onDiscuss = { onDiscussInChat(scored.quote) },
+                            onReadAloud = onReadAloud,
+                            onGenerate30sMusicScene = onGenerate30sMusicScene,
+                            onStopAudio = onStopAudio
                         )
                     }
                 }
@@ -329,15 +467,33 @@ fun LibraryScreen(
         var updatedNote by remember(doc) { mutableStateOf(doc.personalNote) }
         AlertDialog(
             onDismissRequest = { editingQuote = null },
-            title = { Text("Edit Marginalia Note") },
+            title = { Text("Edit Marginalia & Journal Note") },
             text = {
-                OutlinedTextField(
-                    value = updatedNote,
-                    onValueChange = { updatedNote = it },
-                    label = { Text("Personal reflection") },
-                    minLines = 3,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = updatedNote,
+                            onValueChange = { updatedNote = it },
+                            label = { Text("Personal reflection (or dictate via mic)") },
+                            minLines = 3,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("edit_journal_note_input")
+                        )
+                        VoiceDictationMicButton(
+                            target = VoiceTranscriptionTarget.PERSONAL_JOURNAL_NOTE,
+                            transcriptionState = transcriptionState,
+                            onToggleVoiceDictation = onToggleVoiceDictation,
+                            onTranscribedText = { transcript ->
+                                updatedNote = if (updatedNote.isBlank()) transcript else "$updatedNote $transcript"
+                            }
+                        )
+                    }
+                }
             },
             confirmButton = {
                 Button(
@@ -356,17 +512,64 @@ fun LibraryScreen(
             }
         )
     }
+
+    highlightingQuote?.let { doc ->
+        HighlightQuotePassageDialog(
+            quote = doc,
+            transcriptionState = transcriptionState,
+            onDismiss = { highlightingQuote = null },
+            onConfirmHighlight = { startChar, endChar, snippet, inkColor, noteText ->
+                onAddHighlightAnnotation(
+                    doc.id,
+                    snippet,
+                    startChar,
+                    endChar,
+                    inkColor,
+                    noteText
+                )
+            },
+            onToggleVoiceDictation = onToggleVoiceDictation
+        )
+    }
+
+    exportingPdfQuote?.let { doc ->
+        val docAnnotations = quoteAnnotationsByQuoteId[doc.id].orEmpty()
+        ExportJournalPdfDialog(
+            quote = doc,
+            annotations = docAnnotations,
+            audioState = audioState,
+            onDismiss = { exportingPdfQuote = null },
+            onGenerate30sMusicScene = onGenerate30sMusicScene,
+            onExportPdf = { folioTheme ->
+                onExportJournalPdf(doc, folioTheme)
+            },
+            onPdfSavedToUserUri = onPdfSavedToUserUri
+        )
+    }
 }
 
 @Composable
 private fun SavedQuoteArchiveCard(
     doc: SavedQuoteDocument,
+    annotations: List<QuoteHighlightAnnotation>,
+    audioState: QuoteAudioSceneState,
     onEditNote: () -> Unit,
+    onHighlightAndAnnotate: () -> Unit,
+    onExportJournalPdf: () -> Unit,
+    onDeleteHighlightAnnotation: (String) -> Unit,
     onShare: () -> Unit,
     onOpenDossier: () -> Unit,
     onDiscuss: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onReadAloud: (QuoteItem) -> Unit,
+    onGenerate30sMusicScene: (QuoteItem) -> Unit,
+    onStopAudio: () -> Unit
 ) {
+    val domainQuote = doc.toDomainQuoteItem()
+    val highlightedAnnotatedQuote = remember(doc.quoteText, annotations) {
+        buildHighlightedQuoteAnnotatedString(doc.quoteText, annotations)
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -405,9 +608,10 @@ private fun SavedQuoteArchiveCard(
             Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                text = "“${doc.quoteText}”",
+                text = highlightedAnnotatedQuote,
                 style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.testTag("saved_quote_text_${doc.id}")
             )
 
             Spacer(modifier = Modifier.height(6.dp))
@@ -434,7 +638,67 @@ private fun SavedQuoteArchiveCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            if (annotations.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                SavedQuoteHighlightsLedger(
+                    quoteId = doc.id,
+                    annotations = annotations,
+                    onDeleteAnnotation = onDeleteHighlightAnnotation
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Quick Actions Row: Highlight Passage & Annotate + Export Stylized PDF Journal Page
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = onHighlightAndAnnotate,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("highlight_quote_button_${doc.id}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.BorderColor,
+                        contentDescription = "Highlight text and add time-stamped annotation",
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Highlight", style = MaterialTheme.typography.labelMedium)
+                }
+
+                OutlinedButton(
+                    onClick = onExportJournalPdf,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("export_pdf_button_${doc.id}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PictureAsPdf,
+                        contentDescription = "Export stylized PDF journal page",
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Journal PDF", style = MaterialTheme.typography.labelMedium)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            QuoteAudioSceneControlBar(
+                quote = domainQuote,
+                audioState = audioState,
+                onReadAloud = onReadAloud,
+                onGenerate30sMusicScene = onGenerate30sMusicScene,
+                onStopAudio = onStopAudio
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Archival Provenance Stamp Box (Location, Date, Time)
             Surface(
@@ -545,10 +809,14 @@ private fun SavedQuoteArchiveCard(
 @Composable
 private fun CatalogQuoteLibraryCard(
     scoredQuote: PriorityScoredQuote,
+    audioState: QuoteAudioSceneState,
     onSaveWithStamp: () -> Unit,
     onShare: () -> Unit,
     onOpenDossier: () -> Unit,
-    onDiscuss: () -> Unit
+    onDiscuss: () -> Unit,
+    onReadAloud: (QuoteItem) -> Unit,
+    onGenerate30sMusicScene: (QuoteItem) -> Unit,
+    onStopAudio: () -> Unit
 ) {
     val quote = scoredQuote.quote
     Card(
@@ -601,6 +869,16 @@ private fun CatalogQuoteLibraryCard(
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.primary
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            QuoteAudioSceneControlBar(
+                quote = quote,
+                audioState = audioState,
+                onReadAloud = onReadAloud,
+                onGenerate30sMusicScene = onGenerate30sMusicScene,
+                onStopAudio = onStopAudio
             )
 
             Spacer(modifier = Modifier.height(8.dp))

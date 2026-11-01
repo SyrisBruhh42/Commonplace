@@ -70,6 +70,7 @@ import coil.ImageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.example.data.PhotoMatchedQuoteResult
+import com.example.data.QuoteAudioSceneState
 import com.example.data.QuoteItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -81,7 +82,11 @@ fun VisualMuseScreen(
     photoMatchState: UiState<PhotoMatchedQuoteResult>?,
     onAnalyzeBitmap: (Bitmap, String) -> Unit,
     onSaveMatchedQuote: (QuoteItem) -> Unit,
-    onOpenDossier: (QuoteItem) -> Unit
+    onOpenDossier: (QuoteItem) -> Unit,
+    audioState: QuoteAudioSceneState = QuoteAudioSceneState(),
+    onReadAloud: (QuoteItem) -> Unit = {},
+    onGenerate30sMusicScene: (QuoteItem) -> Unit = {},
+    onStopAudio: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -350,6 +355,15 @@ fun VisualMuseScreen(
                                     text = quote.popularOnlineContext,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                QuoteAudioSceneControlBar(
+                                    quote = quote,
+                                    audioState = audioState,
+                                    onReadAloud = onReadAloud,
+                                    onGenerate30sMusicScene = onGenerate30sMusicScene,
+                                    onStopAudio = onStopAudio,
+                                    testTagPrefix = "visual_muse_${quote.id}"
                                 )
                                 Spacer(modifier = Modifier.height(10.dp))
                                 Row(

@@ -27,6 +27,46 @@ data class PhotoMatchedQuoteResult(
     val matchedQuotes: List<QuoteItem>
 )
 
+enum class InTheMomentStyle(val label: String, val promptDirective: String) {
+    WITTY_HUMOR(
+        "Witty & Playful Humor",
+        "Adapt to a sharp, playful, humorous style (reminiscent of Oscar Wilde, Mark Twain, or Douglas Adams) that uses clever irony and warmth while still landing a genuinely deep philosophical truth."
+    ),
+    COMPLEX_POLYMATH(
+        "Complex Cross-Field Synthesis",
+        "Craft an intellectually rich, layered quote that bridges seemingly distant disciplines into a single illuminating metaphor."
+    ),
+    STOIC_PARADOX(
+        "Stoic & Paradoxical Wit",
+        "Blend Stoic composure with a surprising, memorable paradox that makes the reader smile and pause."
+    ),
+    LYRICAL_WONDER(
+        "Poetic & Cosmic Wonder",
+        "Use luminous, rhythmic imagery that connects everyday human moments with vast scientific or artistic wonder."
+    )
+}
+
+object CrossDisciplinaryFields {
+    val ALL = listOf(
+        "Quantum Physics",
+        "Stoic Ethics",
+        "Jazz Improvisation",
+        "Culinary Arts",
+        "Botany & Ecology",
+        "Software & Logic",
+        "Ancient Mythology",
+        "Everyday Comedy",
+        "Architecture",
+        "Astronomy"
+    )
+}
+
+data class InTheMomentQuoteResult(
+    val quoteItem: QuoteItem,
+    val fieldConnectionInsight: String,
+    val companionReflection: String
+)
+
 class GeminiQuoteAiService {
 
     // 1. Low-latency model (gemini-3.1-flash-lite) for instant takeaways & mood resonance
@@ -56,6 +96,27 @@ class GeminiQuoteAiService {
             generationConfig = generationConfig {
                 responseMimeType = "application/json"
                 responseSchema = quoteDiscoverySchema
+            }
+        )
+    }
+
+    // 2b. In-the-Moment Deep Quote Alchemist schema & model (gemini-3.8-flash)
+    private val inTheMomentQuoteSchema = Schema.obj(
+        properties = mapOf(
+            "quoteText" to Schema.string(description = "A deep, memorable quote generated in the moment that adapts to the requested humor/fun style or bridges the selected fields"),
+            "attributedPersona" to Schema.string(description = "Creative attribution or philosophical voice (e.g. 'Commonplace Alchemist • Wildean-Feynman Synthesis')"),
+            "connectedFieldsSummary" to Schema.string(description = "How the quote connects the chosen fields or balances humor with philosophical depth"),
+            "companionCommentary" to Schema.string(description = "A warm, conversational reflection from the Philosophical Companion unpacking the meaning and history/inspiration behind this generated quote"),
+            "tags" to Schema.array(items = Schema.string(), description = "2 to 4 tags representing the fields and style")
+        )
+    )
+
+    private val inTheMomentGeneratorModel by lazy {
+        Firebase.ai.generativeModel(
+            modelName = "gemini-3.8-flash",
+            generationConfig = generationConfig {
+                responseMimeType = "application/json"
+                responseSchema = inTheMomentQuoteSchema
             }
         )
     }
@@ -125,10 +186,12 @@ class GeminiQuoteAiService {
             modelName = "gemini-3.8-flash",
             systemInstruction = content {
                 text(
-                    "You are the Archivist of Commonplace, an erudite, warm philosophical and literary companion. " +
-                        "Help the user explore the deeper meaning of famous quotes, compare Stoic, Existentialist, " +
-                        "Poetic, and Scientific perspectives, verify historical attributions, and recommend quotes " +
-                        "tailored to their personal reflections. Keep your tone thoughtful, clear, and engaging."
+                    "You are the Archivist of Commonplace, an erudite, warm, and witty philosophical companion. " +
+                        "You help the user explore the meaning and history of specific saved quotes from their archive, " +
+                        "and you also delight in generating deep quotes in the moment—adapting to the user's favorite " +
+                        "styles for humor and fun, or synthesizing complex quotes that connect different fields " +
+                        "(such as quantum physics and stoicism, jazz and architecture, or botany and everyday comedy). " +
+                        "Always keep your responses insightful, memorable, and engaging."
                 )
             }
         )
@@ -142,8 +205,8 @@ class GeminiQuoteAiService {
                 history = listOf(
                     content("model") {
                         text(
-                            "Welcome to the Symposium reading room. Share a quote from your archive, " +
-                                "ask about a philosopher's worldview, or tell me what's on your mind today."
+                            "Welcome to the Philosophical Companion. Select any saved quote to explore its meaning and history, " +
+                                "or use the In-the-Moment Quote Alchemist above to generate a deep quote adapted to your favorite humor style or connecting different fields."
                         )
                     }
                 )
@@ -154,6 +217,87 @@ class GeminiQuoteAiService {
 
     fun resetChatSession() {
         chatSession = null
+    }
+
+    /**
+     * Generates a deep quote in the moment using the Firebase AI SDK, adapting to the user's
+     * preferred style (humor/fun or polymath depth), connecting chosen fields, and optionally
+     * drawing inspiration from a currently selected saved quote.
+     */
+    suspend fun generateInTheMomentQuote(
+        style: InTheMomentStyle,
+        selectedFields: List<String>,
+        userMomentPrompt: String,
+        inspirationSavedQuote: QuoteItem? = null
+    ): Result<InTheMomentQuoteResult> {
+        val fieldsText = if (selectedFields.isEmpty()) {
+            "Philosophy, Everyday Comedy, and Science"
+        } else {
+            selectedFields.joinToString(" + ")
+        }
+
+        val inspirationClause = if (inspirationSavedQuote != null) {
+            "Echo or riff upon the spirit of this saved quote the user is reflecting on: \"${inspirationSavedQuote.text}\" by ${inspirationSavedQuote.author}."
+        } else {
+            "Make the quote stand on its own as an original, quotable aphorism."
+        }
+
+        val momentClause = if (userMomentPrompt.isNotBlank()) {
+            "User's current moment or topic: \"$userMomentPrompt\"."
+        } else {
+            "Craft a timeless observation for a curious mind today."
+        }
+
+        val prompt = """
+            Generate a deep Quote in the moment for the user.
+            Style Directive: ${style.label} — ${style.promptDirective}
+            Fields to Connect: [$fieldsText]
+            $momentClause
+            $inspirationClause
+            Ensure the quote is vivid, aphoristic, and genuinely connects the chosen fields or humor style with deep insight.
+        """.trimIndent()
+
+        return try {
+            val response = withTimeout(60_000L) {
+                inTheMomentGeneratorModel.generateContent(prompt)
+            }
+            val jsonText = response.text ?: throw IllegalStateException("Empty response from In-the-Moment Quote model.")
+            val json = JSONObject(jsonText)
+            val tagsArr = json.optJSONArray("tags")
+            val parsedTags = if (tagsArr != null && tagsArr.length() > 0) {
+                (0 until tagsArr.length()).map { tagsArr.getString(it) }
+            } else {
+                selectedFields.ifEmpty { listOf("Philosophy", "Humor") }
+            }
+
+            val quoteItem = QuoteItem(
+                id = "moment_${UUID.randomUUID().toString().take(8)}",
+                text = json.getString("quoteText"),
+                author = json.optString("attributedPersona", "Commonplace Alchemist (${style.label})"),
+                sourceWork = "Forged in the Moment • $fieldsText",
+                category = parsedTags.firstOrNull() ?: "Philosophy",
+                tags = parsedTags,
+                onlinePopularityScore = 96,
+                popularOnlineContext = json.optString("connectedFieldsSummary", "Synthesized across $fieldsText"),
+                era = "In the Moment"
+            )
+
+            Result.success(
+                InTheMomentQuoteResult(
+                    quoteItem = quoteItem,
+                    fieldConnectionInsight = json.optString("connectedFieldsSummary", "Bridges $fieldsText in ${style.label} style."),
+                    companionReflection = json.optString("companionCommentary", "Here is a quote forged for your exact moment and fields of curiosity.")
+                )
+            )
+        } catch (e: TimeoutCancellationException) {
+            Log.e(TAG, "In-the-moment quote generation timed out", e)
+            Result.failure(Exception("Quote generation timed out. Please try again."))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "In-the-moment quote generation failed", e)
+            Result.failure(e)
+        }
     }
 
     // Low-latency response using gemini-3.1-flash-lite

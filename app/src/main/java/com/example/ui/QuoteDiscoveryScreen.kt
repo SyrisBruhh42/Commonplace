@@ -83,8 +83,10 @@ import com.example.R
 import com.example.data.FamilyCircle
 import com.example.data.PriorityMode
 import com.example.data.PriorityScoredQuote
+import com.example.data.QuoteAudioSceneState
 import com.example.data.QuoteCategories
 import com.example.data.QuoteItem
+import com.example.ui.theme.LocalAccessibilitySettings
 
 /**
  * QuoteDiscoveryScreen fetches the daily quote from the Firestore `/daily_quotes` collection
@@ -97,6 +99,8 @@ import com.example.data.QuoteItem
 fun QuoteDiscoveryScreen(
     state: DiscoverUiState,
     familyCircles: List<FamilyCircle> = emptyList(),
+    audioState: QuoteAudioSceneState = QuoteAudioSceneState(),
+    dailyScheduleState: com.example.data.DailyQuoteScheduleState = com.example.data.DailyQuoteScheduleState(),
     onToggleInterest: (String) -> Unit,
     onSelectPriorityMode: (PriorityMode) -> Unit,
     onNextPriorityQuote: () -> Unit,
@@ -107,9 +111,18 @@ fun QuoteDiscoveryScreen(
     onOpenDossier: (QuoteItem) -> Unit,
     onDiscussInChat: (QuoteItem) -> Unit,
     onRefreshLocationStamp: () -> Unit,
-    onDismissStatusBanner: () -> Unit
+    onDismissStatusBanner: () -> Unit,
+    onReadAloud: (QuoteItem) -> Unit = {},
+    onGenerate30sMusicScene: (QuoteItem) -> Unit = {},
+    onStopAudio: () -> Unit = {},
+    onToggleDailyQuoteNotifications: (Boolean) -> Unit = {},
+    onUpdateDailyNotificationTime: (Int, Int) -> Unit = { _, _ -> },
+    onTogglePriorityEngineForDailyPush: (Boolean) -> Unit = {},
+    onSendTestDailyQuoteNotification: () -> Unit = {},
+    onSyncAndPinHomeScreenWidget: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val accessibility = LocalAccessibilitySettings.current
     var quotePendingSave by remember { mutableStateOf<QuoteItem?>(null) }
     var quotePendingFamilyShare by remember { mutableStateOf<QuoteItem?>(null) }
 
@@ -127,27 +140,29 @@ fun QuoteDiscoveryScreen(
             .testTag("quote_discovery_screen"),
         contentAlignment = Alignment.TopCenter
     ) {
-        // Full-bleed simulated parchment canvas backdrop
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val parchmentTop = Color(0xFFFBF6EC)
-            val parchmentMid = Color(0xFFF3E9D7)
-            val parchmentEdge = Color(0xFFE7D8BE)
-            drawRect(
-                brush = Brush.verticalGradient(
-                    colors = listOf(parchmentTop, parchmentMid, parchmentEdge)
+        // Full-bleed simulated parchment canvas backdrop (switches to crisp AAA surface in High Contrast Mode)
+        if (!accessibility.highContrastMode) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val parchmentTop = Color(0xFFFBF6EC)
+                val parchmentMid = Color(0xFFF3E9D7)
+                val parchmentEdge = Color(0xFFE7D8BE)
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(parchmentTop, parchmentMid, parchmentEdge)
+                    )
                 )
-            )
-            // Subtle horizontal ledger lines across the parchment
-            val stepPx = 36.dp.toPx()
-            var y = stepPx
-            while (y < size.height) {
-                drawLine(
-                    color = Color(0xFFD5C2A3).copy(alpha = 0.22f),
-                    start = Offset(0f, y),
-                    end = Offset(size.width, y),
-                    strokeWidth = 1f
-                )
-                y += stepPx
+                // Subtle horizontal ledger lines across the parchment
+                val stepPx = 36.dp.toPx()
+                var y = stepPx
+                while (y < size.height) {
+                    drawLine(
+                        color = Color(0xFFD5C2A3).copy(alpha = 0.22f),
+                        start = Offset(0f, y),
+                        end = Offset(size.width, y),
+                        strokeWidth = 1f
+                    )
+                    y += stepPx
+                }
             }
         }
 
@@ -205,9 +220,27 @@ fun QuoteDiscoveryScreen(
                 previewLocation = state.lastPreviewStampLocation,
                 previewDate = state.lastPreviewStampDate,
                 previewTime = state.lastPreviewStampTime,
+                audioState = audioState,
                 onSaveDailyQuote = { quotePendingSave = state.dailyQuoteFromCollection },
                 onShareDailyToFamily = { quotePendingFamilyShare = state.dailyQuoteFromCollection },
-                onOpenDossier = { onOpenDossier(state.dailyQuoteFromCollection) }
+                onOpenDossier = { onOpenDossier(state.dailyQuoteFromCollection) },
+                onReadAloud = onReadAloud,
+                onGenerate30sMusicScene = onGenerate30sMusicScene,
+                onStopAudio = onStopAudio
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Home Screen Daily Quote Widget & Scheduled 'Quote of the Day' Notification Card
+            DailyQuoteWidgetAndScheduleCard(
+                scheduleState = dailyScheduleState,
+                currentDailyQuote = state.dailyQuoteFromCollection,
+                archivalTimestampPreview = "${state.lastPreviewStampLocation} • ${state.lastPreviewStampDate} • ${state.lastPreviewStampTime}",
+                onToggleNotifications = onToggleDailyQuoteNotifications,
+                onSelectScheduledTime = onUpdateDailyNotificationTime,
+                onToggleUsePriorityEngine = onTogglePriorityEngineForDailyPush,
+                onSendTestNotificationNow = onSendTestDailyQuoteNotification,
+                onSyncAndPinHomeWidget = onSyncAndPinHomeScreenWidget
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -296,6 +329,7 @@ fun QuoteDiscoveryScreen(
                         previewDate = state.lastPreviewStampDate,
                         previewTime = state.lastPreviewStampTime,
                         quickTakeawayState = state.quickTakeawayState,
+                        audioState = audioState,
                         onRequestLocationRefresh = {
                             locationPermissionLauncher.launch(
                                 arrayOf(
@@ -318,7 +352,10 @@ fun QuoteDiscoveryScreen(
                             )
                         },
                         onOpenDossier = { onOpenDossier(scoredQuote.quote) },
-                        onDiscussInChat = { onDiscussInChat(scoredQuote.quote) }
+                        onDiscussInChat = { onDiscussInChat(scoredQuote.quote) },
+                        onReadAloud = onReadAloud,
+                        onGenerate30sMusicScene = onGenerate30sMusicScene,
+                        onStopAudio = onStopAudio
                     )
                 }
             }
@@ -437,48 +474,66 @@ private fun DailyQuoteParchmentBanner(
     previewLocation: String,
     previewDate: String,
     previewTime: String,
+    audioState: QuoteAudioSceneState,
     onSaveDailyQuote: () -> Unit,
     onShareDailyToFamily: () -> Unit,
-    onOpenDossier: () -> Unit
+    onOpenDossier: () -> Unit,
+    onReadAloud: (QuoteItem) -> Unit,
+    onGenerate30sMusicScene: (QuoteItem) -> Unit,
+    onStopAudio: () -> Unit
 ) {
+    val accessibility = LocalAccessibilitySettings.current
+    val cardContainerColor = if (accessibility.highContrastMode) {
+        MaterialTheme.colorScheme.surface
+    } else {
+        Color(0xFFF6ECDA)
+    }
+    val cardBorderColor = if (accessibility.highContrastMode) {
+        MaterialTheme.colorScheme.outline
+    } else {
+        Color(0xFFC8A96E)
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("daily_quote_parchment_card"),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFF6ECDA)
+            containerColor = cardContainerColor
         ),
-        border = BorderStroke(1.5.dp, Color(0xFFC8A96E))
+        border = BorderStroke(if (accessibility.highContrastMode) 2.dp else 1.5.dp, cardBorderColor)
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
             // Simulated aged parchment corner vignette and seal
-            Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(170.dp)
-            ) {
-                drawRect(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color(0xFFFFFBF2).copy(alpha = 0.7f),
-                            Color(0xFFECDCC0).copy(alpha = 0.45f)
-                        ),
-                        center = Offset(size.width * 0.5f, size.height * 0.5f),
-                        radius = size.maxDimension * 0.75f
+            if (!accessibility.highContrastMode) {
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(170.dp)
+                ) {
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color(0xFFFFFBF2).copy(alpha = 0.7f),
+                                Color(0xFFECDCC0).copy(alpha = 0.45f)
+                            ),
+                            center = Offset(size.width * 0.5f, size.height * 0.5f),
+                            radius = size.maxDimension * 0.75f
+                        )
                     )
-                )
-                drawCircle(
-                    color = Color(0xFF8B3A2B).copy(alpha = 0.08f),
-                    radius = 52.dp.toPx(),
-                    center = Offset(size.width - 36.dp.toPx(), 36.dp.toPx())
-                )
-                drawCircle(
-                    color = Color(0xFFC8A96E).copy(alpha = 0.4f),
-                    radius = 58.dp.toPx(),
-                    center = Offset(size.width - 36.dp.toPx(), 36.dp.toPx()),
-                    style = Stroke(width = 1.5.dp.toPx())
-                )
+                    drawCircle(
+                        color = Color(0xFF8B3A2B).copy(alpha = 0.08f),
+                        radius = 52.dp.toPx(),
+                        center = Offset(size.width - 36.dp.toPx(), 36.dp.toPx())
+                    )
+                    drawCircle(
+                        color = Color(0xFFC8A96E).copy(alpha = 0.4f),
+                        radius = 58.dp.toPx(),
+                        center = Offset(size.width - 36.dp.toPx(), 36.dp.toPx()),
+                        style = Stroke(width = 1.5.dp.toPx())
+                    )
+                }
             }
 
             Column(
@@ -538,6 +593,17 @@ private fun DailyQuoteParchmentBanner(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Read Aloud & 30s Lyria Music Scene Bar for Daily Quote
+                QuoteAudioSceneControlBar(
+                    quote = dailyQuote,
+                    audioState = audioState,
+                    onReadAloud = onReadAloud,
+                    onGenerate30sMusicScene = onGenerate30sMusicScene,
+                    onStopAudio = onStopAudio
+                )
+
                 Spacer(modifier = Modifier.height(10.dp))
 
                 Row(
@@ -594,16 +660,31 @@ private fun SimulatedParchmentQuoteCard(
     previewDate: String,
     previewTime: String,
     quickTakeawayState: UiState<String>?,
+    audioState: QuoteAudioSceneState,
     onRequestLocationRefresh: () -> Unit,
     onQuickTakeaway: () -> Unit,
     onOpenSaveDialog: () -> Unit,
     onOpenFamilyShareDialog: () -> Unit,
     onShare: () -> Unit,
     onOpenDossier: () -> Unit,
-    onDiscussInChat: () -> Unit
+    onDiscussInChat: () -> Unit,
+    onReadAloud: (QuoteItem) -> Unit,
+    onGenerate30sMusicScene: (QuoteItem) -> Unit,
+    onStopAudio: () -> Unit
 ) {
     val quote = scoredQuote.quote
+    val accessibility = LocalAccessibilitySettings.current
     val watermarkColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)
+    val cardContainerColor = if (accessibility.highContrastMode) {
+        MaterialTheme.colorScheme.surface
+    } else {
+        Color(0xFFF9F1E1)
+    }
+    val cardBorderColor = if (accessibility.highContrastMode) {
+        MaterialTheme.colorScheme.outline
+    } else {
+        Color(0xFFD2B887)
+    }
 
     Card(
         modifier = Modifier
@@ -611,18 +692,19 @@ private fun SimulatedParchmentQuoteCard(
             .testTag("hero_quote_card"),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFF9F1E1)
+            containerColor = cardContainerColor
         ),
-        border = BorderStroke(1.5.dp, Color(0xFFD2B887)),
+        border = BorderStroke(if (accessibility.highContrastMode) 2.dp else 1.5.dp, cardBorderColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
             // Simulated aged parchment radial wash & editorial crest watermark
-            Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(240.dp)
-            ) {
+            if (!accessibility.highContrastMode) {
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(240.dp)
+                ) {
                 drawRect(
                     brush = Brush.radialGradient(
                         colors = listOf(
@@ -634,11 +716,12 @@ private fun SimulatedParchmentQuoteCard(
                         radius = size.maxDimension * 0.85f
                     )
                 )
-                drawCircle(
-                    color = watermarkColor,
-                    radius = size.minDimension * 0.45f,
-                    center = Offset(size.width * 0.88f, size.height * 0.25f)
-                )
+                    drawCircle(
+                        color = watermarkColor,
+                        radius = size.minDimension * 0.45f,
+                        center = Offset(size.width * 0.88f, size.height * 0.25f)
+                    )
+                }
             }
 
             Column(
@@ -744,6 +827,17 @@ private fun SimulatedParchmentQuoteCard(
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
+
+                // Read Aloud & 30s Lyria Music Scene Bar for Hero Priority Quote
+                QuoteAudioSceneControlBar(
+                    quote = quote,
+                    audioState = audioState,
+                    onReadAloud = onReadAloud,
+                    onGenerate30sMusicScene = onGenerate30sMusicScene,
+                    onStopAudio = onStopAudio
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),

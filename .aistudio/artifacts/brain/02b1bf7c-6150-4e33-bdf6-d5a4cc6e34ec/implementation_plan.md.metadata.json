@@ -1,6 +1,6 @@
 {
-  "summary":  "Comprehensive implementation plan for Commonplace, an editorial literary quote discovery, archival stamping, and Gemini AI philosophical exploration Android app backed by Firebase Auth and Cloud Firestore.",
-  "updatedAt":  "2026-11-01T17:10:45.429558751Z",
+  "summary":  "Implementation plan for MapDiscoveryScreen with Google Maps SDK & archival atlas fallback, PrivacyControlOverlay with global visibility toggle and per-friend location precision permissions, Zero-Trust Firestore split architecture, Home Screen Daily Quote Widget, Scheduled Quote of the Day Notifications, and Interactive Library Annotations with PDF Journal Export.",
+  "updatedAt":  "2026-11-01T21:01:42.632764682Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

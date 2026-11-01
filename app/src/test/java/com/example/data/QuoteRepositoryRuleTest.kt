@@ -208,6 +208,49 @@ class QuoteRepositoryRuleTest : FirestoreEmulatorTestBase() {
         assertTrue(emittedPrefs?.selectedInterests?.contains("Science") == true)
     }
 
+    @Test
+    fun createOrJoinSymposiumRoom_andPostSalonMessage_succeedsForAuthenticatedUsers() = runBlocking {
+        val aliceUid = signInTestUser(ALICE_EMAIL)
+        val aliceRepo = QuoteRepository(firestore, auth)
+
+        val roomRes = withTimeout(DEFAULT_TIMEOUT_MS) {
+            aliceRepo.createOrJoinSymposiumRoom(
+                roomCode = "LFS-7K9M2P",
+                title = "Stoic Co-Reading Salon",
+                gameMode = MultiplayerGameMode.CO_READING_SALON,
+                lifecyclePolicy = LfsLifecyclePolicy.ON_DEMAND_WAKE,
+                currentQuote = sampleQuote
+            )
+        }
+        assertTrue("Expected createOrJoinSymposiumRoom to succeed: ${roomRes.exceptionOrNull()}", roomRes.isSuccess)
+        assertTrue(roomRes.getOrThrow().participantUids.contains(aliceUid))
+
+        val bobUid = signInTestUser(BOB_EMAIL)
+        val bobRepo = QuoteRepository(firestore, auth)
+        val joinRes = withTimeout(DEFAULT_TIMEOUT_MS) {
+            bobRepo.createOrJoinSymposiumRoom(
+                roomCode = "LFS-7K9M2P",
+                title = "Stoic Co-Reading Salon",
+                gameMode = MultiplayerGameMode.CO_READING_SALON,
+                lifecyclePolicy = LfsLifecyclePolicy.ON_DEMAND_WAKE,
+                currentQuote = sampleQuote
+            )
+        }
+        assertTrue("Expected Bob to join symposium room: ${joinRes.exceptionOrNull()}", joinRes.isSuccess)
+        assertTrue(joinRes.getOrThrow().participantUids.contains(bobUid))
+
+        val postRes = withTimeout(DEFAULT_TIMEOUT_MS) {
+            bobRepo.postSalonMessage(
+                roomCode = "LFS-7K9M2P",
+                messageType = "MARGINALIA",
+                text = "Seneca's letter speaks directly to modern anxiety.",
+                quoteSnippet = "imagination than in reality",
+                scholarHandle = "@archivist"
+            )
+        }
+        assertTrue("Expected postSalonMessage to succeed: ${postRes.exceptionOrNull()}", postRes.isSuccess)
+    }
+
     private companion object {
         const val ALICE_EMAIL = "alice@commonplace.test"
         const val BOB_EMAIL = "bob@commonplace.test"

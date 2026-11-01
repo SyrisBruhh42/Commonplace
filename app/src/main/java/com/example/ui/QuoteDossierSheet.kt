@@ -40,6 +40,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.data.QuoteAudioSceneState
+import com.example.data.QuoteItem
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,7 +50,11 @@ fun QuoteDossierSheet(
     onDismiss: () -> Unit,
     onRequestDeepMeaning: () -> Unit,
     onRequestSearchGrounding: () -> Unit,
-    onRequestMapsGrounding: () -> Unit
+    onRequestMapsGrounding: () -> Unit,
+    audioState: QuoteAudioSceneState = QuoteAudioSceneState(),
+    onReadAloud: (QuoteItem) -> Unit = {},
+    onGenerate30sMusicScene: (QuoteItem) -> Unit = {},
+    onStopAudio: () -> Unit = {}
 ) {
     val quote = dossierState.targetQuote ?: return
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -83,7 +89,18 @@ fun QuoteDossierSheet(
                 modifier = Modifier.padding(top = 4.dp)
             )
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+
+            QuoteAudioSceneControlBar(
+                quote = quote,
+                audioState = audioState,
+                onReadAloud = onReadAloud,
+                onGenerate30sMusicScene = onGenerate30sMusicScene,
+                onStopAudio = onStopAudio,
+                testTagPrefix = "dossier_quote_${quote.id}"
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             // 3 Specialized AI Exploration Modes
             Row(
