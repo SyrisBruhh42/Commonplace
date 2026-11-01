@@ -302,7 +302,7 @@ class QuoteRepositoryRuleTest : FirestoreEmulatorTestBase() {
             )
         }
         assertTrue("Expected first daily pin to succeed: ${firstPinResult.exceptionOrNull()}", firstPinResult.isSuccess)
-        val pinId = firstPinResult.getOrThrow().pin.id
+        val pinId = firstPinResult.getOrThrow()
         assertEquals("${aliceUid}_$dayKey", pinId)
 
         // Second pin on the same day must be rejected by the 1/day limit
@@ -325,7 +325,7 @@ class QuoteRepositoryRuleTest : FirestoreEmulatorTestBase() {
         // Connected friend (Bob) can read Alice's Zero-Trust identity envelope
         signInTestUser(BOB_EMAIL)
         val bobIdentityRead = withTimeout(DEFAULT_TIMEOUT_MS) {
-            bobRepo.getPinIdentityForConnectedFriend(pinId)
+            bobRepo.getPinIdentityIfConnected(pinId)
         }
         assertTrue("Expected connected friend Bob to read identity: ${bobIdentityRead.exceptionOrNull()}", bobIdentityRead.isSuccess)
         assertNotNull(bobIdentityRead.getOrThrow())
@@ -334,7 +334,7 @@ class QuoteRepositoryRuleTest : FirestoreEmulatorTestBase() {
         signInTestUser(OUTSIDER_EMAIL)
         val outsiderRepo = QuoteRepository(firestore, auth)
         val outsiderIdentityRead = withTimeout(DEFAULT_TIMEOUT_MS) {
-            outsiderRepo.getPinIdentityForConnectedFriend(pinId)
+            outsiderRepo.getPinIdentityIfConnected(pinId)
         }
         assertTrue("Expected outsider Mallory to be denied identity read", outsiderIdentityRead.isFailure)
         assertEquals(

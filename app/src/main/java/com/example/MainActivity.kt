@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.ImageSearch
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material3.AssistChip
@@ -74,6 +75,7 @@ import com.example.ui.CommonplaceViewModel
 import com.example.ui.FamilyCircleScreen
 import com.example.ui.LibraryScreen
 import com.example.ui.MapDiscoveryScreen
+import com.example.ui.QuestTrilogyCodexSheet
 import com.example.ui.QuoteDiscoveryScreen
 import com.example.ui.QuoteDossierSheet
 import com.example.ui.SymposiumChatScreen
@@ -180,6 +182,7 @@ fun CommonplaceAppShell(
     val pdfExportStatusMessage by viewModel.pdfExportStatusMessage.collectAsStateWithLifecycle()
     val dailyQuoteScheduleState by viewModel.dailyQuoteScheduleState.collectAsStateWithLifecycle()
     val worldMapState by viewModel.worldMapState.collectAsStateWithLifecycle()
+    val trilogyState by viewModel.trilogyState.collectAsStateWithLifecycle()
     val isGeneratingMomentQuote by viewModel.isGeneratingMomentQuote.collectAsStateWithLifecycle()
     val chatMessages by viewModel.chatMessages.collectAsState()
 
@@ -194,6 +197,7 @@ fun CommonplaceAppShell(
     var currentTab by rememberSaveable { mutableIntStateOf(0) }
     var attachedChatQuote by remember { mutableStateOf<QuoteItem?>(null) }
     var showAccessibilitySheet by remember { mutableStateOf(false) }
+    var showTrilogyCodexSheet by remember { mutableStateOf(false) }
 
     // BackHandler on secondary tabs returns to QuoteDiscoveryScreen home tab
     BackHandler(enabled = currentTab != 0) {
@@ -231,6 +235,23 @@ fun CommonplaceAppShell(
                         }
                     },
                     actions = {
+                        AssistChip(
+                            onClick = { showTrilogyCodexSheet = true },
+                            label = {
+                                Text(
+                                    text = trilogyState.activeWing.wingNumber,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Hub,
+                                    contentDescription = "Open Quest Trilogy Codex & TrashArcade Bridge",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            modifier = Modifier.testTag("top_bar_trilogy_codex_button")
+                        )
                         IconButton(
                             onClick = { currentTab = 5 },
                             modifier = Modifier.testTag("top_bar_visual_muse_button")
@@ -557,6 +578,20 @@ fun CommonplaceAppShell(
                 settings = accessibilitySettings,
                 onUpdateSettings = viewModel::updateAccessibilitySettings,
                 onDismiss = { showAccessibilitySheet = false }
+            )
+        }
+
+        if (showTrilogyCodexSheet) {
+            QuestTrilogyCodexSheet(
+                envelope = trilogyState,
+                onSelectWing = viewModel::selectTrilogyWing,
+                onTriggerWingAction = viewModel::triggerWingInteractiveAction,
+                onSelectPresetAndProbe = viewModel::selectServerPresetAndProbeHandshake,
+                onSetDoctrineOverride = viewModel::setManualDoctrineOverride,
+                onEmitFeaturedQuoteDirective = viewModel::emitFeaturedQuoteQuestDirective,
+                onSyncAegisSaveSlot = viewModel::sealAndSyncAegisSaveSlot,
+                onSendRmblynCommand = viewModel::sendRmblynOverlayCommand,
+                onDismiss = { showTrilogyCodexSheet = false }
             )
         }
     }

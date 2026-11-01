@@ -1387,4 +1387,510 @@ object ZeroTrustMapCoordinatesHelper {
     )
 }
 
+// ============================================================================
+// LFS Oasis Aegis (U1/U2/U3/U4), Tailscale Handshake, 32-State ABAC Lattice,
+// Total Lexical Order LWW & 4-Wing Quest Trilogy Codex Models
+// ============================================================================
+
+enum class LfsServerPreset(
+    val wireId: String,
+    val label: String,
+    val baseUrl: String,
+    val handshakeUrl: String,
+    val wsUrl: String,
+    val description: String
+) {
+    TAILSCALE_ANCHOR_PROD(
+        wireId = "TAILSCALE_ANCHOR_PROD",
+        label = "Tailscale Anchor Prod (lfs-prod.tail420c4d.ts.net)",
+        baseUrl = "https://lfs-prod.tail420c4d.ts.net",
+        handshakeUrl = "http://100.106.12.104:13379/lfs-sso/handshake",
+        wsUrl = "wss://lfs-prod.tail420c4d.ts.net/ws",
+        description = "Anchor 100.106.12.104:13379 • Tailnet TNoZe9MmWS11CNTRL"
+    ),
+    TAILSCALE_LAPUTA_U3(
+        wireId = "TAILSCALE_LAPUTA_U3",
+        label = "Tailscale Laputa U3 (:19448)",
+        baseUrl = "http://100.115.219.120:19448",
+        handshakeUrl = "http://100.115.219.120:19448/lfs-sso/handshake",
+        wsUrl = "ws://100.115.219.120:19448/ws",
+        description = "Laputa U3 Hoster over Tailscale CGNAT 100.64.0.0/10"
+    ),
+    LFS_CLOUD_U2(
+        wireId = "LFS_CLOUD_U2",
+        label = "LFS Cloud U2 (play.lewisfamilysystems.com)",
+        baseUrl = "https://play.lewisfamilysystems.com",
+        handshakeUrl = "https://play.lewisfamilysystems.com/lfs-sso/handshake",
+        wsUrl = "wss://sync.lewisfamilysystems.com:48295",
+        description = "U2 Sync Edge (:3000) & wss://sync.lewisfamilysystems.com:48295"
+    ),
+    LOCAL_HOSTER_19448(
+        wireId = "LOCAL_HOSTER_19448",
+        label = "Local Hoster (:19448)",
+        baseUrl = "http://127.0.0.1:19448",
+        handshakeUrl = "http://127.0.0.1:19448/lfs-sso/handshake",
+        wsUrl = "ws://127.0.0.1:19448/ws",
+        description = "Local U3 Hoster loopback (127.0.0.1:19448 / 10.0.2.2:19448)"
+    )
+}
+
+enum class LfsPersona(
+    val wireId: String,
+    val label: String,
+    val defaultTrustRing: Int
+) {
+    OWNER("OWNER", "Oasis Owner (Ring 4)", 4),
+    ADULT_PEER("ADULT_PEER", "Trusted Adult Peer (Ring 3)", 3),
+    CHILD_PROFILE("CHILD_PROFILE", "Protected Youth Profile (Ring 2)", 2),
+    GUEST_PASS("GUEST_PASS", "Guest Salon Pass (Ring 1)", 1);
+
+    companion object {
+        fun fromWire(raw: String?): LfsPersona {
+            val clean = raw?.trim()?.uppercase().orEmpty()
+            return entries.find { it.wireId == clean } ?: OWNER
+        }
+    }
+}
+
+/**
+ * Machado CVD-safe status pillar check (`[PASS]` Sapphire `#0072B2` / `[WARN]` Vermilion `#D55E00`).
+ */
+data class HandshakePillarCheck(
+    val key: String,
+    val label: String,
+    val passed: Boolean,
+    val detail: String
+) {
+    val badgeText: String
+        get() = if (passed) "[PASS]" else "[WARN]"
+}
+
+data class TailscaleHandshakeResult(
+    val isLiveResponse: Boolean = false,
+    val preset: LfsServerPreset = LfsServerPreset.TAILSCALE_ANCHOR_PROD,
+    val tailnetId: String = "TNoZe9MmWS11CNTRL",
+    val tailnetDomain: String = "tail420c4d.ts.net",
+    val anchorHost: String = "100.106.12.104:13379",
+    val stableNodeId: String = "nStable_commonplace_u1_7f4a",
+    val subuserId: String = "sub_archivist_01",
+    val persona: LfsPersona = LfsPersona.OWNER,
+    val trustRing: Int = 4,
+    val generationEpoch: Long = 1042L,
+    val tailscaleTunnelPass: Boolean = true,
+    val abacPerimeterPass: Boolean = true,
+    val isolatedProfilePass: Boolean = true,
+    val userDataBackupPass: Boolean = true,
+    val abacEvaluation: Abac32EvaluationResult = Abac32EvaluationResult(),
+    val statusSummary: String = "Synthesized local Aegis handshake (<=1600ms non-blocking fallback)",
+    val probedAtEpochMs: Long = System.currentTimeMillis()
+) {
+    val pillars: List<HandshakePillarCheck>
+        get() = listOf(
+            HandshakePillarCheck(
+                key = "tailscale_tunnel",
+                label = "tailscale_tunnel",
+                passed = tailscaleTunnelPass,
+                detail = if (tailscaleTunnelPass) "CGNAT 100.64.0.0/10 • $tailnetDomain" else "Local Loopback Standby"
+            ),
+            HandshakePillarCheck(
+                key = "abac_perimeter",
+                label = "abac_perimeter",
+                passed = abacPerimeterPass,
+                detail = "32-State Lattice ${abacEvaluation.stateBits} • Ring $trustRing (${persona.wireId})"
+            ),
+            HandshakePillarCheck(
+                key = "isolated_profile",
+                label = "isolated_profile",
+                passed = isolatedProfilePass,
+                detail = "Subuser $subuserId • Node $stableNodeId"
+            ),
+            HandshakePillarCheck(
+                key = "user_data_backup",
+                label = "user_data_backup",
+                passed = userDataBackupPass,
+                detail = "6-Gate aegisEnvelopeV1 • Epoch $generationEpoch"
+            )
+        )
+}
+
+/**
+ * 32-State `FIRST_APPLICABLE_DENY` ABAC Lattice evaluation result.
+ * `permit = !explicitDeny && (trustRing >= minRing) && (vipBypass || (curfewOk && stepUpOk))`
+ * `stateBits` encodes the 5 boolean inputs:
+ *   bit 0: `explicitDeny` ('1' or '0')
+ *   bit 1: `trustRing >= minRing` ('1' or '0')
+ *   bit 2: `vipBypass` ('1' or '0')
+ *   bit 3: `curfewOk` ('1' or '0')
+ *   bit 4: `stepUpOk` ('1' or '0')
+ * Example: `"01110"` when `explicitDeny=false`, `ringOk=true`, `vipBypass=true`, `curfewOk=true`, `stepUpOk=false`.
+ */
+data class Abac32EvaluationResult(
+    val permit: Boolean = true,
+    val stateBits: String = "01111",
+    val explicitDeny: Boolean = false,
+    val trustRing: Int = 4,
+    val minRing: Int = 2,
+    val vipBypass: Boolean = true,
+    val curfewOk: Boolean = true,
+    val stepUpOk: Boolean = true
+)
+
+/**
+ * Total Lexical Order `(ts, replicaId, value)` Last-Writer-Wins cell.
+ * Uses `stableNodeId` (`Node.StableID`) as deterministic `replicaId` tie-breaker.
+ */
+data class TotalOrderLwwCell<T>(
+    val ts: Long,
+    val replicaId: String,
+    val value: T
+)
+
+data class CrdtStateDeltaOp(
+    val opId: String = "op_${java.util.UUID.randomUUID().toString().take(8)}",
+    val fieldPath: String,
+    val ts: Long = System.currentTimeMillis(),
+    val replicaId: String,
+    val valueJson: String
+)
+
+enum class PhilosophicalDoctrine(
+    val wireId: String,
+    val label: String,
+    val guildBuffTitle: String,
+    val guildBuffSummary: String
+) {
+    AGGRESSION(
+        wireId = "aggression",
+        label = "Aggression (Vanguard Stoic Might)",
+        guildBuffTitle = "+18% Raid Strike & Vanguard Momentum",
+        guildBuffSummary = "Channels Stoic resolve and historical courage into decisive frontline guild strikes."
+    ),
+    ARCANE(
+        wireId = "arcane",
+        label = "Arcane (Epistemic & Astral Lore)",
+        guildBuffTitle = "+22% Scriptorium Mana & Bestiary Insight",
+        guildBuffSummary = "Distills philosophy, science, and poetry into high-potency arcane synthesis."
+    ),
+    STEALTH(
+        wireId = "stealth",
+        label = "Stealth (Veiled Shadow & Wit)",
+        guildBuffTitle = "+20% Undercity Evasion & Critical Ambush",
+        guildBuffSummary = "Weaves literary subtlety, existential poise, and paradoxical wit into silent infiltration."
+    );
+
+    companion object {
+        fun fromWireId(raw: String?): PhilosophicalDoctrine {
+            val clean = raw?.trim()?.lowercase().orEmpty()
+            return entries.find { it.wireId == clean } ?: ARCANE
+        }
+
+        /**
+         * Automatically maps a Commonplace Quote category to a canonical Philosophical Doctrine.
+         */
+        fun fromQuoteCategory(category: String): PhilosophicalDoctrine {
+            return when (category.trim().lowercase()) {
+                "stoicism", "history", "leadership", "courage", "action" -> AGGRESSION
+                "philosophy", "science", "poetry", "cosmos", "metaphysics" -> ARCANE
+                "literature", "wisdom", "mindfulness", "art", "existentialism" -> STEALTH
+                else -> ARCANE
+            }
+        }
+    }
+}
+
+enum class TrilogyWing(
+    val wingNumber: String,
+    val slug: String,
+    val title: String,
+    val subtitle: String,
+    val badge: String
+) {
+    WING_I_COMMONPLACE(
+        wingNumber = "Wing I",
+        slug = "commonplace-codex",
+        title = "Commonplace Book (Wing I Hub)",
+        subtitle = "Literary Quotes, Epigraphs, Zero-Trust World Map, Family Salon & Symposium",
+        badge = "Master Style Authority"
+    ),
+    WING_II_SCRIPTORIUM_PART1(
+        wingNumber = "Wing II",
+        slug = "lfs-quest-part-1",
+        title = "LFS-Quest Part 1 — Scriptorium & PowerBlocks",
+        subtitle = "Keep Chronicles, Forum Board, PowerBlocks Pipeline & Task Queue",
+        badge = "Part 1 • Scriptorium"
+    ),
+    WING_III_CHAPTERHOUSE_PART2(
+        wingNumber = "Wing III",
+        slug = "lfs-quest-part-2",
+        title = "LFS-Quest Part 2 — Guild Chapterhouse & Intel Lab",
+        subtitle = "Mission Board, Co-Op Raid Boss, Gemini Intel Lab & SaveSheet Ledger",
+        badge = "Part 2 • Chapterhouse"
+    ),
+    WING_IV_OBSIDIAN_DESK_PART3(
+        wingNumber = "Wing IV",
+        slug = "lfs-quest-part-3",
+        title = "LFS-Quest Part 3 — Obsidian Vigil 3D Guild Desk",
+        subtitle = "First-Person 3D Mahogany Desk, Adventurer Roster, Realm Map & Bestiary Index",
+        badge = "Part 3 • 3D Guild Desk"
+    )
+}
+
+/**
+ * Emitted whenever a user saves/stamps a Quote or completes a Salon Trivia round in Commonplace.
+ * Propagates to `/api/lfs/sync/state` and local trilogy storage so Parts 1, 2, and 3 immediately
+ * receive it as an active Quest Contract, Forum Prompt, and Guild Doctrine buff.
+ */
+data class CommonplaceQuestDirectiveV1(
+    val directiveId: String = "dir_${java.util.UUID.randomUUID().toString().replace("-", "").take(10)}",
+    val quoteId: String = "",
+    val quoteText: String = "",
+    val author: String = "",
+    val category: String = "Philosophy",
+    val philosophicalDoctrine: String = PhilosophicalDoctrine.ARCANE.wireId,
+    val sourceEvent: String = "QUOTE_STAMP",
+    val goldReward: Int = 45,
+    val rupeeReward: Int = 20,
+    val reputationReward: Int = 15,
+    val bestiarySeed: String = "Chronicle Specter of Alexandria",
+    val forumPromptTitle: String = "",
+    val scriptoriumTaskLabel: String = "",
+    val raidMissionBrief: String = "",
+    val createdAtEpochMs: Long = System.currentTimeMillis(),
+    val replicaId: String = "nStable_commonplace_u1_7f4a"
+)
+
+data class RupeeGemDenomination(
+    val value: Int,
+    val name: String,
+    val cmykToneLabel: String,
+    val hexColor: Long,
+    val count: Int
+)
+
+data class TrashArcadeRelic(
+    val slug: String,
+    val title: String,
+    val originWing: String,
+    val effectDescription: String,
+    val isUnlocked: Boolean = true
+)
+
+data class AegisSaveSlotSummary(
+    val slotKey: String,
+    val label: String,
+    val isOccupied: Boolean = false,
+    val updatedAtEpochMs: Long = 0L,
+    val activeDoctrine: String = "arcane",
+    val guildGold: Int = 0,
+    val totalRupees: Int = 0,
+    val directiveCount: Int = 0,
+    val sealedEnvelopePreview: String = "",
+    val replicatedToAnchor: Boolean = true
+)
+
+/**
+ * Master state envelope tracking the unified Commonplace & LFS-Quest Trilogy across all 4 wings,
+ * Tailscale Zero-Trust Handshake, TrashArcade Rupee Satchel, and 20-Slot Aegis Save Ledger.
+ */
+data class CommonplaceTrilogySyncEnvelopeV1(
+    val schemaVersion: String = "commonplace.trilogy.sync.v1",
+    val capsuleTarget: String = "lfs-trash-arcade",
+    val cartridgeSlug: String = "commonplace-codex",
+    val activeWing: TrilogyWing = TrilogyWing.WING_I_COMMONPLACE,
+    val activeRoomCode: String = "OASIS-7K9M",
+    val serverPreset: LfsServerPreset = LfsServerPreset.TAILSCALE_ANCHOR_PROD,
+    val handshake: TailscaleHandshakeResult = TailscaleHandshakeResult(),
+    val manualDoctrineOverride: PhilosophicalDoctrine? = null,
+    val effectiveDoctrine: PhilosophicalDoctrine = PhilosophicalDoctrine.ARCANE,
+    val guildGold: Int = 340,
+    val guildReputation: Int = 125,
+    val totalRupees: Int = 486,
+    val rupeeDenominations: List<RupeeGemDenomination> = defaultRupeeSatchel(486),
+    val unlockedRelics: List<TrashArcadeRelic> = defaultCrossGameRelics(),
+    val pendingDirectives: List<CommonplaceQuestDirectiveV1> = defaultSeedDirectives(),
+    val wing2ChronicleQueue: List<String> = listOf(
+        "Keep Chronicle #14: Seneca's Epistemic Vigil in the North Scriptorium",
+        "PowerBlocks Pipeline: Compile Stoic Marginalia into Guild Edict IV",
+        "Forum Board Thread: 'Does imagination amplify the Raid Boss aura?'"
+    ),
+    val wing3RaidBossName: String = "Arch-oleth the Uncatalogued (HP 74%)",
+    val wing3RaidHpPercent: Int = 74,
+    val wing3ActiveMissions: List<String> = listOf(
+        "Chapterhouse Contract: Deliver 3 Stamped Folios to the Intel Lab",
+        "Co-Op Raid Strike: Channel Arcane Doctrine against Arch-oleth"
+    ),
+    val wing4DeskArtifacts: List<String> = listOf(
+        "Mahogany Desk Ledger • Candlelit Quill & Brass Astrolabe",
+        "Adventurer Roster: Sir Viren (Arcane Scholar), Lyra (Shadow Delver), Kael (Stoic Vanguard)",
+        "Bestiary Index: Chronicle Specter, Ink-Wraith of Bloomsbury, Gilded Automaton"
+    ),
+    val saveSlots: List<AegisSaveSlotSummary> = defaultTwentySaveSlots(),
+    val selectedSaveSlotKey: String = "slot_01",
+    val lastRmblynCommandResult: String = "Rmblyn Overlay Ready • Channel #commonplace-codex",
+    val lastSyncStatusBanner: String = "Wing I Master Portal Active • 6-Gate Aegis Envelope Synced (slot_01)"
+) {
+    companion object {
+        val CANONICAL_RUPEE_VALUES = listOf(1, 5, 10, 20, 50, 100, 200, 500, 1000)
+
+        fun defaultRupeeSatchel(totalAmount: Int = 486): List<RupeeGemDenomination> {
+            return listOf(
+                RupeeGemDenomination(1, "Cyan Shard (1)", "Cyan Tint", 0xFF00BCD4, 6),
+                RupeeGemDenomination(5, "Azure Prism (5)", "Deep Cyan", 0xFF0288D1, 4),
+                RupeeGemDenomination(10, "Emerald Cut (10)", "Cyan-Yellow", 0xFF2E7D32, 4),
+                RupeeGemDenomination(20, "Amber Topaz (20)", "Warm Yellow", 0xFFF9A825, 3),
+                RupeeGemDenomination(50, "Magenta Ruby (50)", "Pure Magenta", 0xFFC2185B, 3),
+                RupeeGemDenomination(100, "Violet Amethyst (100)", "Cyan-Magenta", 0xFF6A1B9A, 2),
+                RupeeGemDenomination(200, "Crimson Sunstone (200)", "Magenta-Yellow", 0xFFD84315, 0),
+                RupeeGemDenomination(500, "Obsidian Star (500)", "CMY Key Black", 0xFF37474F, 0),
+                RupeeGemDenomination(1000, "Sovereign Aegis Gem (1000)", "Gilded Prismatic", 0xFFD4AF37, maxOf(0, totalAmount / 1000))
+            )
+        }
+
+        fun defaultCrossGameRelics(): List<TrashArcadeRelic> = listOf(
+            TrashArcadeRelic(
+                slug = "porch-chronicler-quill",
+                title = "Porch Chronicler's Quill",
+                originWing = "Wing I • Commonplace Book",
+                effectDescription = "Inscribes provenance timestamps into Guild Quest Directives (+15% Gold on Save)",
+                isUnlocked = true
+            ),
+            TrashArcadeRelic(
+                slug = "viren-epistemic-bookmark",
+                title = "Viren's Epistemic Bookmark",
+                originWing = "Wing II • Scriptorium Part 1",
+                effectDescription = "Unlocks instant Total Order LWW annotation synthesis across PowerBlocks",
+                isUnlocked = true
+            ),
+            TrashArcadeRelic(
+                slug = "undercity-delver-torch",
+                title = "Undercity Delver's Torch",
+                originWing = "Wing III • Chapterhouse Part 2",
+                effectDescription = "Illuminates hidden Co-Op Raid weak points during overnight Z_1440 curfews",
+                isUnlocked = true
+            ),
+            TrashArcadeRelic(
+                slug = "willow-visor-emerald",
+                title = "Willow's Visor Emerald",
+                originWing = "Wing IV • Obsidian Vigil Part 3",
+                effectDescription = "Reveals Bestiary lore seeds on the 3D Mahogany Guild Desk",
+                isUnlocked = true
+            )
+        )
+
+        fun defaultSeedDirectives(): List<CommonplaceQuestDirectiveV1> = listOf(
+            CommonplaceQuestDirectiveV1(
+                directiveId = "dir_seneca_stoa_01",
+                quoteId = "q_seneca_imagination",
+                quoteText = "We suffer more often in imagination than in reality.",
+                author = "Seneca the Younger",
+                category = "Stoicism",
+                philosophicalDoctrine = PhilosophicalDoctrine.AGGRESSION.wireId,
+                sourceEvent = "QUOTE_STAMP",
+                goldReward = 50,
+                rupeeReward = 25,
+                reputationReward = 15,
+                bestiarySeed = "Phantasm of Unfounded Dread",
+                forumPromptTitle = "Stoic Vanguard: Overcoming Imaginary Dread Before the Raid",
+                scriptoriumTaskLabel = "Transcribe Letter XIII into Keep Chronicle #15",
+                raidMissionBrief = "Vanguard Strike: Dispel illusionary debuffs on the Chapterhouse frontline"
+            ),
+            CommonplaceQuestDirectiveV1(
+                directiveId = "dir_borges_labyrinth_02",
+                quoteId = "q_borges_paradise",
+                quoteText = "I have always imagined that Paradise will be a kind of library.",
+                author = "Jorge Luis Borges",
+                category = "Literature",
+                philosophicalDoctrine = PhilosophicalDoctrine.STEALTH.wireId,
+                sourceEvent = "SALON_TRIVIA_VICTORY",
+                goldReward = 65,
+                rupeeReward = 30,
+                reputationReward = 20,
+                bestiarySeed = "Hexagonal Archivist Automaton",
+                forumPromptTitle = "Labyrinthine Stacks: Mapping the Infinite Scriptorium",
+                scriptoriumTaskLabel = "Index Hexagonal Gallery Folios in PowerBlocks",
+                raidMissionBrief = "Stealth Recon: Navigate the Library Vaults undetected"
+            )
+        )
+
+        fun defaultTwentySaveSlots(): List<AegisSaveSlotSummary> {
+            return (1..20).map { idx ->
+                val slotKey = String.format(java.util.Locale.US, "slot_%02d", idx)
+                if (idx == 1) {
+                    AegisSaveSlotSummary(
+                        slotKey = slotKey,
+                        label = "Slot 01 • Primary Auto-Sync Ledger",
+                        isOccupied = true,
+                        updatedAtEpochMs = System.currentTimeMillis(),
+                        activeDoctrine = PhilosophicalDoctrine.ARCANE.wireId,
+                        guildGold = 340,
+                        totalRupees = 486,
+                        directiveCount = 2,
+                        sealedEnvelopePreview = "AEGIS1:slot_01:6GATE_VERIFIED",
+                        replicatedToAnchor = true
+                    )
+                } else {
+                    AegisSaveSlotSummary(
+                        slotKey = slotKey,
+                        label = String.format(java.util.Locale.US, "Slot %02d • Archival Vault", idx),
+                        isOccupied = false
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Native bridge equivalent of `window.ArcadeAssetBridge` for TrashArcade & LFS-Quest cross-game
+ * Rupee wallet and relic synchronization.
+ */
+object NativeArcadeAssetBridge {
+    const val CAPSULE_TARGET = "lfs-trash-arcade"
+    const val CARTRIDGE_SLUG = "commonplace-codex"
+
+    fun computeBestiarySeedForQuote(quote: QuoteItem, doctrine: PhilosophicalDoctrine): String {
+        val prefix = when (doctrine) {
+            PhilosophicalDoctrine.AGGRESSION -> "Ironclad Vanguard"
+            PhilosophicalDoctrine.ARCANE -> "Astral Lexicon"
+            PhilosophicalDoctrine.STEALTH -> "Veiled Whisper"
+        }
+        val authorSurname = quote.author.split(" ").lastOrNull()?.ifBlank { "Sage" } ?: "Sage"
+        return "$prefix of $authorSurname (${quote.category})"
+    }
+
+    fun buildDirectiveFromQuote(
+        quote: QuoteItem,
+        sourceEvent: String,
+        manualDoctrineOverride: PhilosophicalDoctrine?,
+        replicaId: String
+    ): CommonplaceQuestDirectiveV1 {
+        val doctrine = manualDoctrineOverride ?: PhilosophicalDoctrine.fromQuoteCategory(quote.category)
+        val isTrivia = sourceEvent.contains("TRIVIA", ignoreCase = true)
+        val gold = if (isTrivia) 65 else 45
+        val rupees = if (isTrivia) 30 else 20
+        val rep = if (isTrivia) 20 else 15
+        val bestiary = computeBestiarySeedForQuote(quote, doctrine)
+        val snippet = quote.text.take(56).trim()
+        return CommonplaceQuestDirectiveV1(
+            directiveId = "dir_${java.util.UUID.randomUUID().toString().replace("-", "").take(10)}",
+            quoteId = quote.id,
+            quoteText = quote.text,
+            author = quote.author,
+            category = quote.category,
+            philosophicalDoctrine = doctrine.wireId,
+            sourceEvent = sourceEvent,
+            goldReward = gold,
+            rupeeReward = rupees,
+            reputationReward = rep,
+            bestiarySeed = bestiary,
+            forumPromptTitle = "[${doctrine.wireId.uppercase()}] ${quote.author}: “$snippet…”",
+            scriptoriumTaskLabel = "PowerBlocks: Codify ${quote.author}'s ${quote.category} maxim",
+            raidMissionBrief = "${doctrine.guildBuffTitle} • Deploy $bestiary contract",
+            createdAtEpochMs = System.currentTimeMillis(),
+            replicaId = replicaId
+        )
+    }
+}
+
+
 

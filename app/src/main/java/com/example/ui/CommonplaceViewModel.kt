@@ -5,7 +5,10 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.AccessibilitySettings
+import com.example.data.CommonplaceQuestDirectiveV1
 import com.example.data.CommonplaceTransportMode
+import com.example.data.CommonplaceTrilogySyncEnvelopeV1
+import com.example.data.CrdtStateDeltaOp
 import com.example.data.DailyQuoteRetrievalEngine
 import com.example.data.DailyQuoteScheduleState
 import com.example.data.FamilyCircle
@@ -17,6 +20,7 @@ import com.example.data.HighlightInkColor
 import com.example.data.JournalPdfExportResult
 import com.example.data.LfsHostMode
 import com.example.data.LfsLifecyclePolicy
+import com.example.data.LfsServerPreset
 import com.example.data.LiveMarginaliaEntry
 import com.example.data.LocationStampService
 import com.example.data.MapPinFilterMode
@@ -24,7 +28,9 @@ import com.example.data.MapPinIdentityDocument
 import com.example.data.MapQuotePinDocument
 import com.example.data.MultiplayerGameMode
 import com.example.data.MultiplayerSalonSessionState
+import com.example.data.NativeArcadeAssetBridge
 import com.example.data.PdfFolioTheme
+import com.example.data.PhilosophicalDoctrine
 import com.example.data.PhotoMatchedQuoteResult
 import com.example.data.PriorityMode
 import com.example.data.PriorityScoredQuote
@@ -35,6 +41,8 @@ import com.example.data.QuoteItem
 import com.example.data.QuoteRepository
 import com.example.data.SavedQuoteDocument
 import com.example.data.SeedQuoteCatalog
+import com.example.data.TotalOrderLwwCell
+import com.example.data.TrilogyWing
 import com.example.data.VoiceTranscriptionState
 import com.example.data.VoiceTranscriptionTarget
 import com.example.data.WorldMapUiState
@@ -201,6 +209,9 @@ class CommonplaceViewModel(
     )
     val worldMapState: StateFlow<WorldMapUiState> = _worldMapState.asStateFlow()
 
+    private val _trilogyState = MutableStateFlow(CommonplaceTrilogySyncEnvelopeV1())
+    val trilogyState: StateFlow<CommonplaceTrilogySyncEnvelopeV1> = _trilogyState.asStateFlow()
+
     private val latestPublicMapPins = MutableStateFlow<List<MapQuotePinDocument>>(emptyList())
     private val latestConnectedIdentities = MutableStateFlow<List<MapPinIdentityDocument>>(emptyList())
     private val additionalConnectedFriendEmails = MutableStateFlow<List<String>>(emptyList())
@@ -231,6 +242,7 @@ class CommonplaceViewModel(
         observeIncomingWireMarginalia()
         observeAnnotationsForSavedQuotes()
         observeZeroTrustWorldMap()
+        probeTailscaleHandshakeAndSyncPresence(LfsServerPreset.TAILSCALE_ANCHOR_PROD)
     }
 
     // =========================================================================
@@ -687,6 +699,14 @@ class CommonplaceViewModel(
                 participants = updatedParticipants
             )
         }
+
+        // Cross-Wing Trilogy Bridge: Emit a CommonplaceQuestDirectiveV1 whenever a Salon Trivia round completes
+        val triviaQuote = _discoverState.value.allCatalogQuotes.find { it.id == round.quoteId }
+            ?: _salonSessionState.value.currentPassageQuote
+        emitQuestDirectiveForQuote(
+            quote = triviaQuote,
+            sourceEvent = if (isCorrect) "TRIVIA_VICTORY" else "TRIVIA_COMPLETED"
+        )
     }
 
     fun advanceTriviaRound() {
@@ -1053,6 +1073,8 @@ class CommonplaceViewModel(
                     }
                 }
             )
+            // Cross-Wing Trilogy Bridge: Emit Quest Directive to Parts 1, 2, and 3 on quote save/stamp
+            emitQuestDirectiveForQuote(quote = quote, sourceEvent = "QUOTE_SAVED_AND_STAMPED")
         }
     }
 
@@ -2214,6 +2236,323 @@ class CommonplaceViewModel(
 
     fun dismissWorldMapStatusBanner() {
         _worldMapState.update { it.copy(statusBannerMessage = null) }
+    }
+
+    // =========================================================================
+    // Master 4-Wing Trilogy Launcher, Tailscale Handshake & TrashArcade Bridge
+    // =========================================================================
+
+    fun probeTailscaleHandshakeAndSyncPresence(preset: LfsServerPreset = _trilogyState.value.serverPreset) {
+        viewModelScope.launch {
+            val calendar = Calendar.getInstance()
+            val minuteOfDay = calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE)
+            val handshake = oasisServerClient.probeTailscaleHandshake(
+                preset = preset,
+                fallbackUserId = currentUserId,
+                minuteOfDay = minuteOfDay
+            )
+            _trilogyState.update { current ->
+                current.copy(
+                    serverPreset = preset,
+                    handshake = handshake,
+                    lastSyncStatusBanner = handshake.statusSummary
+                )
+            }
+
+            // Broadcast U2 presence (non-blocking <= 1600ms)
+            oasisServerClient.u2SyncPresence(
+                u2BaseUrl = preset.baseUrl,
+                activeRoomCode = _trilogyState.value.activeRoomCode,
+                activeWingSlug = _trilogyState.value.activeWing.slug,
+                stableNodeId = handshake.stableNodeId
+            )
+        }
+    }
+
+    fun selectServerPresetAndProbeHandshake(preset: LfsServerPreset) {
+        probeTailscaleHandshakeAndSyncPresence(preset)
+    }
+
+    fun selectTrilogyWing(wing: TrilogyWing) {
+        _trilogyState.update { current ->
+            current.copy(
+                activeWing = wing,
+                lastSyncStatusBanner = "Switched to ${wing.wingNumber}: ${wing.title}"
+            )
+        }
+        viewModelScope.launch {
+            val state = _trilogyState.value
+            oasisServerClient.u2SyncPresence(
+                u2BaseUrl = state.serverPreset.baseUrl,
+                activeRoomCode = state.activeRoomCode,
+                activeWingSlug = wing.slug,
+                stableNodeId = state.handshake.stableNodeId
+            )
+        }
+    }
+
+    fun setManualDoctrineOverride(doctrine: PhilosophicalDoctrine?) {
+        _trilogyState.update { current ->
+            val latestCat = current.pendingDirectives.firstOrNull()?.category ?: "Philosophy"
+            val effective = doctrine ?: PhilosophicalDoctrine.fromQuoteCategory(latestCat)
+            val modeDesc = doctrine?.label ?: "Auto-Mapped from Quote Category (${effective.label})"
+            current.copy(
+                manualDoctrineOverride = doctrine,
+                effectiveDoctrine = effective,
+                lastSyncStatusBanner = "Philosophical Doctrine set to: $modeDesc"
+            )
+        }
+    }
+
+    fun emitFeaturedQuoteQuestDirective() {
+        val quote = _discoverState.value.currentScoredQuote?.quote
+            ?: _discoverState.value.dailyQuoteFromCollection
+        emitQuestDirectiveForQuote(quote = quote, sourceEvent = "MANUAL_CODEX_FORGE")
+    }
+
+    fun emitQuestDirectiveForQuote(
+        quote: QuoteItem,
+        sourceEvent: String
+    ) {
+        val current = _trilogyState.value
+        val replicaId = current.handshake.stableNodeId
+        val directive = NativeArcadeAssetBridge.buildDirectiveFromQuote(
+            quote = quote,
+            sourceEvent = sourceEvent,
+            manualDoctrineOverride = current.manualDoctrineOverride,
+            replicaId = replicaId
+        )
+
+        // Resolve Total Lexical Order LWW (ts, replicaId, val) using stableNodeId as deterministic replicaId
+        val nowMs = System.currentTimeMillis()
+        val localCell = TotalOrderLwwCell(
+            ts = nowMs - 1L,
+            replicaId = replicaId,
+            value = current.pendingDirectives.firstOrNull()?.directiveId ?: "dir_init"
+        )
+        val incomingCell = TotalOrderLwwCell(
+            ts = nowMs,
+            replicaId = replicaId,
+            value = directive.directiveId
+        )
+        val winningDirectiveId = OasisCommonplaceServerClient.resolveTotalOrderLww(localCell, incomingCell).value
+
+        val newTotalRupees = current.totalRupees + directive.rupeeReward
+        val bonusDenom = when {
+            directive.rupeeReward >= 50 -> 50
+            directive.rupeeReward >= 20 -> 20
+            else -> 10
+        }
+        val updatedDenominations = current.rupeeDenominations.map { denom ->
+            if (denom.value == bonusDenom) denom.copy(count = denom.count + 1)
+            else denom
+        }
+
+        val updatedWing2Queue = (
+            listOf(directive.scriptoriumTaskLabel) + current.wing2ChronicleQueue
+            ).distinct().take(6)
+
+        val updatedWing3Missions = (
+            listOf(directive.raidMissionBrief) + current.wing3ActiveMissions
+            ).distinct().take(6)
+
+        val updatedWing4Artifacts = (
+            listOf("Bestiary Seed: ${directive.bestiarySeed}") + current.wing4DeskArtifacts
+            ).distinct().take(6)
+
+        val resolvedDoctrine = PhilosophicalDoctrine.fromWireId(directive.philosophicalDoctrine)
+
+        _trilogyState.update { state ->
+            val updatedDirectives = (listOf(directive) + state.pendingDirectives.filterNot { it.directiveId == directive.directiveId }).take(12)
+            state.copy(
+                effectiveDoctrine = resolvedDoctrine,
+                guildGold = state.guildGold + directive.goldReward,
+                guildReputation = state.guildReputation + directive.reputationReward,
+                totalRupees = newTotalRupees,
+                rupeeDenominations = updatedDenominations,
+                pendingDirectives = updatedDirectives,
+                wing2ChronicleQueue = updatedWing2Queue,
+                wing3ActiveMissions = updatedWing3Missions,
+                wing4DeskArtifacts = updatedWing4Artifacts,
+                lastSyncStatusBanner = "Emitted Directive $winningDirectiveId (${directive.philosophicalDoctrine.uppercase()}) • +${directive.goldReward}G +${directive.rupeeReward}R • Synced to slot_01"
+            )
+        }
+
+        // Non-blocking sync to /api/lfs/sync/state and auto-sync primary slot_01 to /api/lfs/sync/saves
+        viewModelScope.launch {
+            val stateAfter = _trilogyState.value
+            val op = CrdtStateDeltaOp(
+                opId = "op_${directive.directiveId}",
+                fieldPath = "trilogy.directives.latest",
+                ts = nowMs,
+                replicaId = replicaId,
+                valueJson = "{\"directiveId\":\"${directive.directiveId}\",\"doctrine\":\"${directive.philosophicalDoctrine}\",\"author\":\"${quote.author}\"}"
+            )
+            oasisServerClient.u2SyncStateDelta(
+                u2BaseUrl = stateAfter.serverPreset.baseUrl,
+                roomId = stateAfter.activeRoomCode,
+                ops = listOf(op),
+                directive = directive,
+                stableNodeId = replicaId
+            )
+            sealAndSyncAegisSaveSlotInternal(slotKey = "slot_01", silentBanner = true)
+        }
+    }
+
+    fun triggerWingInteractiveAction(wing: TrilogyWing) {
+        val current = _trilogyState.value
+        val replicaId = current.handshake.stableNodeId
+        val nowMs = System.currentTimeMillis()
+
+        when (wing) {
+            TrilogyWing.WING_I_COMMONPLACE -> {
+                emitFeaturedQuoteQuestDirective()
+            }
+            TrilogyWing.WING_II_SCRIPTORIUM_PART1 -> {
+                val nextTask = "Chronicle-Synth #${(nowMs % 900) + 100} (Verified by $replicaId)"
+                _trilogyState.update { state ->
+                    state.copy(
+                        guildGold = state.guildGold + 35,
+                        guildReputation = state.guildReputation + 12,
+                        wing2ChronicleQueue = (listOf(nextTask) + state.wing2ChronicleQueue).take(6),
+                        lastSyncStatusBanner = "Wing II Scriptorium executed PowerBlock: $nextTask (+35G)"
+                    )
+                }
+            }
+            TrilogyWing.WING_III_CHAPTERHOUSE_PART2 -> {
+                val doctrine = current.manualDoctrineOverride ?: current.effectiveDoctrine
+                val newHp = maxOf(5, current.wing3RaidHpPercent - 8)
+                val raidStatus = "Arch-oleth the Uncatalogued (HP $newHp%) — Struck with ${doctrine.label}"
+                _trilogyState.update { state ->
+                    state.copy(
+                        guildGold = state.guildGold + 60,
+                        guildReputation = state.guildReputation + 25,
+                        wing3RaidHpPercent = newHp,
+                        wing3RaidBossName = raidStatus,
+                        lastSyncStatusBanner = "Wing III Chapterhouse Raid Strike: $raidStatus (+60G, +25Rep)"
+                    )
+                }
+            }
+            TrilogyWing.WING_IV_OBSIDIAN_DESK_PART3 -> {
+                val newLore = "Obsidian Desk Folio #${(nowMs % 89) + 10}: Candlelit Bestiary Entry"
+                _trilogyState.update { state ->
+                    state.copy(
+                        guildReputation = state.guildReputation + 18,
+                        wing4DeskArtifacts = (listOf(newLore) + state.wing4DeskArtifacts).distinct().take(6),
+                        lastSyncStatusBanner = "Wing IV 3D Mahogany Guild Desk inspected: $newLore (+18Rep)"
+                    )
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            val updated = _trilogyState.value
+            oasisServerClient.u2SyncStateDelta(
+                u2BaseUrl = updated.serverPreset.baseUrl,
+                roomId = updated.activeRoomCode,
+                ops = listOf(
+                    CrdtStateDeltaOp(
+                        opId = "op_wing_${wing.slug}_$nowMs",
+                        fieldPath = "trilogy.wing.${wing.slug}",
+                        ts = nowMs,
+                        replicaId = replicaId,
+                        valueJson = "{\"wing\":\"${wing.slug}\",\"gold\":${updated.guildGold},\"rep\":${updated.guildReputation}}"
+                    )
+                ),
+                stableNodeId = replicaId
+            )
+        }
+    }
+
+    fun sealAndSyncAegisSaveSlot(slotKey: String) {
+        viewModelScope.launch {
+            sealAndSyncAegisSaveSlotInternal(slotKey = slotKey, silentBanner = false)
+        }
+    }
+
+    private suspend fun sealAndSyncAegisSaveSlotInternal(
+        slotKey: String,
+        silentBanner: Boolean
+    ) {
+        val current = _trilogyState.value
+        val normalizedSlot = slotKey.trim().ifBlank { "slot_01" }
+        val doctrine = current.manualDoctrineOverride ?: current.effectiveDoctrine
+        val payloadJson = buildString {
+            append("{")
+            append("\"slotKey\":\"").append(normalizedSlot).append("\",")
+            append("\"activeWing\":\"").append(current.activeWing.slug).append("\",")
+            append("\"doctrine\":\"").append(doctrine.wireId).append("\",")
+            append("\"guildGold\":").append(current.guildGold).append(",")
+            append("\"guildReputation\":").append(current.guildReputation).append(",")
+            append("\"totalRupees\":").append(current.totalRupees).append(",")
+            append("\"directivesCount\":").append(current.pendingDirectives.size)
+            append("}")
+        }
+
+        val syncRes = oasisServerClient.u2SyncSavesAegisSlot(
+            u2BaseUrl = current.serverPreset.baseUrl,
+            slotKey = normalizedSlot,
+            stableNodeId = current.handshake.stableNodeId,
+            subuserId = current.handshake.subuserId,
+            generationEpoch = current.handshake.generationEpoch,
+            abacStateBits = current.handshake.abacEvaluation.stateBits,
+            replicateToAnchor = true,
+            stateSnapshotJson = payloadJson
+        )
+
+        val nowMs = System.currentTimeMillis()
+        _trilogyState.update { state ->
+            val updatedSlots = state.saveSlots.map { slot ->
+                if (slot.slotKey == normalizedSlot) {
+                    slot.copy(
+                        isOccupied = true,
+                        updatedAtEpochMs = nowMs,
+                        activeDoctrine = doctrine.wireId,
+                        guildGold = state.guildGold,
+                        totalRupees = state.totalRupees,
+                        directiveCount = state.pendingDirectives.size,
+                        sealedEnvelopePreview = syncRes.toString().take(48),
+                        replicatedToAnchor = true
+                    )
+                } else {
+                    slot
+                }
+            }
+            state.copy(
+                selectedSaveSlotKey = normalizedSlot,
+                saveSlots = updatedSlots,
+                lastSyncStatusBanner = if (silentBanner) {
+                    state.lastSyncStatusBanner
+                } else {
+                    "Sealed 6-Gate aegisEnvelopeV1 into $normalizedSlot (replicateToAnchor=true)"
+                }
+            )
+        }
+    }
+
+    fun sendRmblynOverlayCommand(rawCommand: String) {
+        val clean = rawCommand.trim().ifBlank { "/trilogy status" }
+        viewModelScope.launch {
+            val current = _trilogyState.value
+            val u2Resp = oasisServerClient.u2SyncRmblyn(
+                u2BaseUrl = current.serverPreset.baseUrl,
+                channelId = "#commonplace-codex",
+                rawInput = clean,
+                stableNodeId = current.handshake.stableNodeId
+            )
+            val u3Resp = oasisServerClient.u3OverlayRmblyn(
+                u3BaseUrl = LfsServerPreset.TAILSCALE_LAPUTA_U3.baseUrl,
+                channelId = "#commonplace-codex",
+                rawInput = clean,
+                stableNodeId = current.handshake.stableNodeId
+            )
+            _trilogyState.update { state ->
+                state.copy(
+                    lastRmblynCommandResult = "U2: ${u2Resp.optString("rawInput", clean)} • U3: ${u3Resp.optString("echo", clean)}",
+                    lastSyncStatusBanner = "Rmblyn Dispatched (“$clean”) to /api/lfs/sync/rmblyn & /v1/overlay/rmblyn"
+                )
+            }
+        }
     }
 }
 

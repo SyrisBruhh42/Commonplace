@@ -20,6 +20,12 @@ class NetworkHealthService(
 ) {
     companion object {
         private const val TAILSCALE_IPV6_PREFIX = "fd7a:115c:a1e0:"
+        const val CANONICAL_TAILNET_ID = "TNoZe9MmWS11CNTRL"
+        const val CANONICAL_TAILNET_DOMAIN = "tail420c4d.ts.net"
+        const val CANONICAL_ANCHOR_HOST = "lfs-prod.tail420c4d.ts.net"
+        const val CANONICAL_ANCHOR_IP_PORT = "100.106.12.104:13379"
+        const val CANONICAL_LAPUTA_U3_IP_PORT = "100.115.219.120:19448"
+
         val RECOGNIZED_VPN_INTERFACE_PREFIXES = listOf(
             "tailscale",
             "ts",
@@ -30,9 +36,13 @@ class NetworkHealthService(
             "lfs"
         )
         val RECOGNIZED_PRIVATE_DNS_DOMAINS = listOf(
+            "tail420c4d.ts.net",
+            "lfs-prod.tail420c4d.ts.net",
             "ts.net",
             "tailscale.net",
-            "lewisfamilysystems.com"
+            "lewisfamilysystems.com",
+            "sync.lewisfamilysystems.com",
+            "play.lewisfamilysystems.com"
         )
 
         /**

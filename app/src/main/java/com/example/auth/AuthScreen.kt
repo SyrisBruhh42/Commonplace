@@ -67,6 +67,14 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import com.example.R
+import com.example.data.CommonplaceTrilogySyncEnvelopeV1
+import com.example.data.LfsServerPreset
+import com.example.data.NativeArcadeAssetBridge
+import com.example.data.SeedQuoteCatalog
+import com.example.data.TrilogyWing
+import com.example.network.OasisCommonplaceServerClient
+import com.example.ui.MasterPortalTrilogyCard
+import com.example.ui.QuestTrilogyCodexSheet
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -192,8 +200,13 @@ fun LoginScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val credentialManager = remember { CredentialManager.create(context) }
+    val portalClient = remember { OasisCommonplaceServerClient() }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showTrilogyCodexSheet by remember { mutableStateOf(false) }
+    var portalTrilogyEnvelope by remember {
+        mutableStateOf(CommonplaceTrilogySyncEnvelopeV1())
+    }
 
     LaunchedEffect(Unit) {
         attemptAutoSignIn(
@@ -202,6 +215,13 @@ fun LoginScreen(
             onAuthSuccess = onAuthSuccess,
             onUnauthenticated = { isLoading = false },
             scope = scope
+        )
+        val handshake = portalClient.probeTailscaleHandshake(
+            preset = LfsServerPreset.TAILSCALE_ANCHOR_PROD
+        )
+        portalTrilogyEnvelope = portalTrilogyEnvelope.copy(
+            handshake = handshake,
+            lastSyncStatusBanner = handshake.statusSummary
         )
     }
 
@@ -315,7 +335,15 @@ fun LoginScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Master Opening Portal Card for the 4-Wing Trilogy & TrashArcade Bridge
+                MasterPortalTrilogyCard(
+                    envelope = portalTrilogyEnvelope,
+                    onOpenCodexDrawer = { showTrilogyCodexSheet = true }
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
 
                 if (errorMessage != null) {
                     Card(
@@ -393,6 +421,95 @@ fun LoginScreen(
                 )
             }
         }
+    }
+
+    if (showTrilogyCodexSheet) {
+        QuestTrilogyCodexSheet(
+            envelope = portalTrilogyEnvelope,
+            onSelectWing = { wing ->
+                portalTrilogyEnvelope = portalTrilogyEnvelope.copy(
+                    activeWing = wing,
+                    lastSyncStatusBanner = "Switched to ${wing.wingNumber}: ${wing.title}"
+                )
+            },
+            onTriggerWingAction = { wing ->
+                portalTrilogyEnvelope = portalTrilogyEnvelope.copy(
+                    guildGold = portalTrilogyEnvelope.guildGold + 40,
+                    guildReputation = portalTrilogyEnvelope.guildReputation + 15,
+                    lastSyncStatusBanner = "Executed ${wing.wingNumber} portal action (+40G, +15Rep)"
+                )
+            },
+            onSelectPresetAndProbe = { preset ->
+                scope.launch {
+                    val hs = portalClient.probeTailscaleHandshake(preset = preset)
+                    portalTrilogyEnvelope = portalTrilogyEnvelope.copy(
+                        serverPreset = preset,
+                        handshake = hs,
+                        lastSyncStatusBanner = hs.statusSummary
+                    )
+                }
+            },
+            onSetDoctrineOverride = { doc ->
+                portalTrilogyEnvelope = portalTrilogyEnvelope.copy(
+                    manualDoctrineOverride = doc,
+                    effectiveDoctrine = doc ?: portalTrilogyEnvelope.effectiveDoctrine,
+                    lastSyncStatusBanner = "Doctrine set to ${doc?.label ?: "Auto-Mapped"}"
+                )
+            },
+            onEmitFeaturedQuoteDirective = {
+                val quote = SeedQuoteCatalog.allQuotes.random()
+                val dir = NativeArcadeAssetBridge.buildDirectiveFromQuote(
+                    quote = quote,
+                    sourceEvent = "PORTAL_CODEX_FORGE",
+                    manualDoctrineOverride = portalTrilogyEnvelope.manualDoctrineOverride,
+                    replicaId = portalTrilogyEnvelope.handshake.stableNodeId
+                )
+                portalTrilogyEnvelope = portalTrilogyEnvelope.copy(
+                    guildGold = portalTrilogyEnvelope.guildGold + dir.goldReward,
+                    guildReputation = portalTrilogyEnvelope.guildReputation + dir.reputationReward,
+                    totalRupees = portalTrilogyEnvelope.totalRupees + dir.rupeeReward,
+                    pendingDirectives = listOf(dir) + portalTrilogyEnvelope.pendingDirectives,
+                    lastSyncStatusBanner = "Forged Directive ${dir.directiveId} (${dir.philosophicalDoctrine.uppercase()})"
+                )
+            },
+            onSyncAegisSaveSlot = { slotKey ->
+                scope.launch {
+                    portalClient.u2SyncSavesAegisSlot(
+                        u2BaseUrl = portalTrilogyEnvelope.serverPreset.baseUrl,
+                        slotKey = slotKey,
+                        stableNodeId = portalTrilogyEnvelope.handshake.stableNodeId,
+                        subuserId = portalTrilogyEnvelope.handshake.subuserId,
+                        generationEpoch = portalTrilogyEnvelope.handshake.generationEpoch,
+                        abacStateBits = portalTrilogyEnvelope.handshake.abacEvaluation.stateBits,
+                        replicateToAnchor = true,
+                        stateSnapshotJson = "{\"slotKey\":\"$slotKey\",\"gold\":${portalTrilogyEnvelope.guildGold}}"
+                    )
+                    portalTrilogyEnvelope = portalTrilogyEnvelope.copy(
+                        selectedSaveSlotKey = slotKey,
+                        saveSlots = portalTrilogyEnvelope.saveSlots.map { s ->
+                            if (s.slotKey == slotKey) s.copy(isOccupied = true, replicatedToAnchor = true, guildGold = portalTrilogyEnvelope.guildGold)
+                            else s
+                        },
+                        lastSyncStatusBanner = "Sealed 6-Gate aegisEnvelopeV1 into $slotKey"
+                    )
+                }
+            },
+            onSendRmblynCommand = { cmd ->
+                scope.launch {
+                    val res = portalClient.u2SyncRmblyn(
+                        u2BaseUrl = portalTrilogyEnvelope.serverPreset.baseUrl,
+                        channelId = "#commonplace-codex",
+                        rawInput = cmd,
+                        stableNodeId = portalTrilogyEnvelope.handshake.stableNodeId
+                    )
+                    portalTrilogyEnvelope = portalTrilogyEnvelope.copy(
+                        lastRmblynCommandResult = res.toString().take(80),
+                        lastSyncStatusBanner = "Dispatched Rmblyn: $cmd"
+                    )
+                }
+            },
+            onDismiss = { showTrilogyCodexSheet = false }
+        )
     }
 }
 

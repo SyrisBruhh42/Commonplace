@@ -4,8 +4,12 @@ import com.example.data.CommonplaceTransportMode
 import com.example.data.LfsHostMode
 import com.example.data.LfsLifecyclePolicy
 import com.example.data.LfsServerEndpointConfig
+import com.example.data.LfsServerPreset
 import com.example.data.MultiplayerGameMode
+import com.example.data.NativeArcadeAssetBridge
+import com.example.data.PhilosophicalDoctrine
 import com.example.data.SeedQuoteCatalog
+import com.example.data.TotalOrderLwwCell
 import com.example.network.CommonplaceCryptoEnvelope
 import com.example.network.OasisCommonplaceServerClient
 import kotlinx.coroutines.runBlocking
@@ -211,7 +215,102 @@ class ExampleUnitTest {
         assertTrue(com.example.ui.theme.meetsWcagAaa(dark.onTertiary, dark.tertiary))
         assertTrue(com.example.ui.theme.meetsWcagAaa(dark.outline, dark.background))
     }
+
+    @Test
+    fun z1440CurfewAndAbac32LatticeAndTotalOrderLww_satisfyFormalInvariants() {
+        // 1. Euclidean Positive Modulo in Z_1440 for overnight curfews (22:00 = 1320 to 06:00 = 360)
+        assertTrue(OasisCommonplaceServerClient.isWithinCurfewZ1440(minuteOfDay = 23 * 60, startMin = 22 * 60, endMin = 6 * 60))
+        assertTrue(OasisCommonplaceServerClient.isWithinCurfewZ1440(minuteOfDay = 2 * 60, startMin = 22 * 60, endMin = 6 * 60))
+        assertFalse(OasisCommonplaceServerClient.isWithinCurfewZ1440(minuteOfDay = 14 * 60, startMin = 22 * 60, endMin = 6 * 60))
+
+        // 2. 32-State FIRST_APPLICABLE_DENY ABAC Lattice Evaluator
+        val permitted = OasisCommonplaceServerClient.evaluateAbac32Lattice(
+            explicitDeny = false,
+            trustRing = 3,
+            minRing = 2,
+            vipBypass = false,
+            curfewOk = true,
+            stepUpOk = true
+        )
+        assertTrue(permitted.permit)
+        assertEquals("01011", permitted.stateBits)
+
+        val vipPermittedDuringCurfew = OasisCommonplaceServerClient.evaluateAbac32Lattice(
+            explicitDeny = false,
+            trustRing = 4,
+            minRing = 2,
+            vipBypass = true,
+            curfewOk = false,
+            stepUpOk = false
+        )
+        assertTrue(vipPermittedDuringCurfew.permit)
+        assertEquals("01100", vipPermittedDuringCurfew.stateBits)
+
+        val explicitDenied = OasisCommonplaceServerClient.evaluateAbac32Lattice(
+            explicitDeny = true,
+            trustRing = 4,
+            minRing = 1,
+            vipBypass = true,
+            curfewOk = true,
+            stepUpOk = true
+        )
+        assertFalse(explicitDenied.permit)
+        assertEquals("11111", explicitDenied.stateBits)
+
+        // 3. Total Lexical Order (ts, replicaId, val) LWW Resolver
+        val cellA = TotalOrderLwwCell(ts = 1700000000L, replicaId = "nStable420A", value = "alpha")
+        val cellB = TotalOrderLwwCell(ts = 1700000000L, replicaId = "nStable420C", value = "beta")
+        assertEquals(cellB, OasisCommonplaceServerClient.resolveTotalOrderLww(cellA, cellB))
+    }
+
+    @Test
+    fun aegisEnvelopeV1AndTrashArcadeBridge_sealSixGateAndEmitCrossWingDirectives() {
+        val statePayload = "{\"wing\":\"WING_I_COMMONPLACE\",\"gold\":420,\"rep\":128}"
+        val sealedResult = CommonplaceCryptoEnvelope.sealAegisEnvelopeV1(
+            slotKey = "slot_01",
+            capsuleTarget = "lfs-trash-arcade",
+            cartridgeSlug = "commonplace-codex",
+            stableNodeId = "nStable420c4d",
+            subuserId = "sub_archivist_01",
+            generationEpoch = 14L,
+            abacStateBits = "01111",
+            replicateToAnchor = true,
+            stateJson = statePayload,
+            passphrase = "oasis-aegis-TNoZe9MmWS11CNTRL"
+        )
+        assertTrue(sealedResult.isSuccess)
+        val aegisWrapper = sealedResult.getOrThrow()
+        assertTrue(aegisWrapper.has("aegisEnvelopeV1"))
+
+        val unsealedResult = CommonplaceCryptoEnvelope.verifyAndUnsealAegisEnvelopeV1(
+            envelopeWrapper = aegisWrapper,
+            passphraseOverride = "oasis-aegis-TNoZe9MmWS11CNTRL"
+        )
+        assertTrue(unsealedResult.isSuccess)
+        assertEquals(statePayload, unsealedResult.getOrThrow())
+
+        // Verify TrashArcade Rupee denominations (1..1000) & Cross-Wing Quest Directive
+        val defaultEnvelope = com.example.data.CommonplaceTrilogySyncEnvelopeV1()
+        assertEquals(9, defaultEnvelope.rupeeDenominations.size)
+        assertEquals(1, defaultEnvelope.rupeeDenominations.first().value)
+        assertEquals(1000, defaultEnvelope.rupeeDenominations.last().value)
+        assertEquals(4, defaultEnvelope.unlockedRelics.size)
+        assertEquals(20, defaultEnvelope.saveSlots.size)
+
+        val quote = SeedQuoteCatalog.allQuotes.first()
+        val directive = NativeArcadeAssetBridge.buildDirectiveFromQuote(
+            quote = quote,
+            sourceEvent = "UNIT_TEST",
+            manualDoctrineOverride = PhilosophicalDoctrine.ARCANE,
+            replicaId = "nStable420c4d"
+        )
+        assertEquals("arcane", directive.philosophicalDoctrine)
+        assertTrue(directive.goldReward > 0)
+        assertTrue(directive.rupeeReward > 0)
+        assertEquals("http://100.106.12.104:13379/lfs-sso/handshake", LfsServerPreset.TAILSCALE_ANCHOR_PROD.handshakeUrl)
+    }
 }
+
 
 
 
