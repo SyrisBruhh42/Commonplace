@@ -2201,3 +2201,99 @@ object NativeArcadeAssetBridge {
 
 
 
+
+// ============================================================================
+// BM25 Scoring & Reciprocal Rank Fusion (RRF) Models
+// ============================================================================
+
+object QuoteSearchEngine {
+    /**
+     * Non-negative Lucene Okapi BM25 IDF formulation:
+     * idf = ln(1 + (N - df + 0.5) / (df + 0.5))
+     * Returns max(0.0, idf) to prevent negative scoring for highly common terms.
+     */
+    fun computeIdf(n: Int, df: Int): Double {
+        val idf = kotlin.math.ln(1.0 + (n - df + 0.5) / (df + 0.5))
+        return kotlin.math.max(0.0, idf)
+    }
+
+    /**
+     * Simple alphanumeric lowercase tokenizer for BM25 processing.
+     */
+    fun tokenize(text: String): List<String> {
+        return text.lowercase().split(Regex("[^a-z0-9]+")).filter { it.isNotBlank() }
+    }
+
+    /**
+     * BM25 algorithm to rank quotes by a given string query.
+     */
+    fun rankBm25(
+        query: String,
+        catalog: List<QuoteItem>,
+        k1: Double = 1.2,
+        b: Double = 0.75
+    ): List<Pair<QuoteItem, Double>> {
+        val queryTerms = tokenize(query)
+        if (queryTerms.isEmpty() || catalog.isEmpty()) {
+            return catalog.map { it to 0.0 }
+        }
+
+        val n = catalog.size
+
+        // Prepare document representations (title, author, category, text, tags combined)
+        val docTerms = catalog.map { quote ->
+            val docText = "${quote.text} ${quote.author} ${quote.category} ${quote.tags.joinToString(" ")}"
+            tokenize(docText)
+        }
+
+        val avgdl = docTerms.sumOf { it.size }.toDouble() / n.toDouble()
+
+        // Calculate document frequency for query terms
+        val df = queryTerms.associateWith { term ->
+            docTerms.count { it.contains(term) }
+        }
+
+        // Calculate IDF for query terms
+        val idf = queryTerms.associateWith { term ->
+            computeIdf(n, df[term] ?: 0)
+        }
+
+        // Calculate score for each document
+        return catalog.indices.map { i ->
+            val doc = docTerms[i]
+            val dl = doc.size.toDouble()
+
+            var score = 0.0
+            for (term in queryTerms) {
+                val tf = doc.count { it == term }.toDouble()
+                if (tf > 0) {
+                    val termIdf = idf[term] ?: 0.0
+                    val termScore = termIdf * (tf * (k1 + 1.0)) / (tf + k1 * (1.0 - b + b * (dl / avgdl)))
+                    score += termScore
+                }
+            }
+            catalog[i] to score
+        }.sortedByDescending { it.second }
+    }
+
+    /**
+     * Reciprocal Rank Fusion (RRF) for combining multiple ranked lists.
+     * RRF_score = sum(1 / (k + rank_i))
+     */
+    fun rankRrf(
+        rankings: List<List<QuoteItem>>,
+        k: Int = 60
+    ): List<Pair<QuoteItem, Double>> {
+        val rrfScores = mutableMapOf<QuoteItem, Double>()
+
+        for (ranking in rankings) {
+            ranking.forEachIndexed { index, quote ->
+                val rank = index + 1 // Rank is 1-indexed
+                val score = 1.0 / (k + rank).toDouble()
+                rrfScores[quote] = (rrfScores[quote] ?: 0.0) + score
+            }
+        }
+
+        return rrfScores.toList().sortedByDescending { it.second }
+    }
+}

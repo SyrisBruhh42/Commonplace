@@ -19,6 +19,7 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+
 class ExampleUnitTest {
 
     @Test
@@ -390,9 +391,57 @@ class ExampleUnitTest {
             )
         )
     }
+
+    @Test
+    fun computeIdf_isNonNegative_withOkapiBm25() {
+        val idfNormal = com.example.data.QuoteSearchEngine.computeIdf(10, 1)
+        assertTrue(idfNormal > 0.0)
+
+        val idfAll = com.example.data.QuoteSearchEngine.computeIdf(10, 10)
+        assertTrue(idfAll >= 0.0)
+
+        val idfMost = com.example.data.QuoteSearchEngine.computeIdf(10, 9)
+        assertTrue(idfMost >= 0.0)
+    }
+
+    @Test
+    fun rankBm25_scoresQuotesCorrectly() {
+        val quotes = listOf(
+            com.example.data.QuoteItem("1", "To be or not to be", "Shakespeare", "Hamlet", "Literature", emptyList(), 100, ""),
+            com.example.data.QuoteItem("2", "I think therefore I am", "Descartes", "Philosophy", "Philosophy", emptyList(), 100, ""),
+            com.example.data.QuoteItem("3", "To think is to exist", "Unknown", "Unknown", "Philosophy", emptyList(), 100, "")
+        )
+
+        val results = com.example.data.QuoteSearchEngine.rankBm25("think", quotes)
+        val thinkQuotes = results.filter { it.second > 0.0 }
+        assertEquals(2, thinkQuotes.size)
+        assertTrue(thinkQuotes.any { it.first.id == "2" })
+        assertTrue(thinkQuotes.any { it.first.id == "3" })
+        assertTrue(results[0].second >= results[1].second)
+    }
+
+    @Test
+    fun rankRrf_fusesRankingsCorrectly() {
+        val q1 = com.example.data.QuoteItem("1", "A", "A", "A", "A", emptyList(), 100, "")
+        val q2 = com.example.data.QuoteItem("2", "B", "B", "B", "B", emptyList(), 100, "")
+        val q3 = com.example.data.QuoteItem("3", "C", "C", "C", "C", emptyList(), 100, "")
+
+        val ranking1 = listOf(q1, q2, q3)
+        val ranking2 = listOf(q3, q1, q2)
+
+        val results = com.example.data.QuoteSearchEngine.rankRrf(listOf(ranking1, ranking2), k = 60)
+
+        assertEquals(3, results.size)
+        val scoreQ1 = 1.0/61.0 + 1.0/62.0
+        val scoreQ3 = 1.0/63.0 + 1.0/61.0
+        val scoreQ2 = 1.0/62.0 + 1.0/63.0
+
+        assertEquals(q1, results[0].first)
+        assertEquals(q3, results[1].first)
+        assertEquals(q2, results[2].first)
+
+        assertTrue(kotlin.math.abs(results[0].second - scoreQ1) < 0.0001)
+        assertTrue(kotlin.math.abs(results[1].second - scoreQ3) < 0.0001)
+        assertTrue(kotlin.math.abs(results[2].second - scoreQ2) < 0.0001)
+    }
 }
-
-
-
-
-
